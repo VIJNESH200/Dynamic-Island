@@ -1,0 +1,24 @@
+<resources>
+    <string name="app_name">Dynamic Island</string>
+    <string name="notification_service_label">Dynamic Island Media &amp; Notifications</string>
+    <string name="service_notification_title">Dynamic Island Active</string>
+    <string name="service_notification_text">Dynamic Island is running in the foreground</string>
+    <string name="channel_name">Dynamic Island Overlay</string>
+    <string name="channel_description">Persistent foreground notification keeping Dynamic Island running</string>
+    
+    <!-- Permissions -->
+    <string name="permission_overlay_title">Overlay Permission Required</string>
+    <string name="permission_overlay_desc">Dynamic Island needs "Display over other apps" permission to render the floating pill above your screen and status bar.</string>
+    <string name="permission_overlay_grant">Grant Overlay Permission</string>
+    
+    <string name="permission_notification_title">Notification Access Required</string>
+    <string name="permission_notification_desc">To display real-time music metadata (song title, artist) and playback controls from Spotify, YouTube Music, etc., Android requires Notification Access to connect to Media Sessions.</string>
+    <string name="permission_notification_grant">Enable Notification Access</string>
+    
+    <string name="permission_post_notifications_title">Notification Permission</string>
+    <string name="permission_post_notifications_desc">Required on Android 13+ to keep the persistent foreground service alive without being terminated.</string>
+
+    <!-- Tips -->
+    <string name="nothing_os_tip_title">CMF Phone 2 Pro / Nothing OS Optimization</string>
+    <string name="nothing_os_tip_body">Nothing OS has aggressive battery saver rules that may sleep background services. To ensure 24/7 reliability:\n\n1. Long press Dynamic Island icon > App Info (or Settings > Apps > Dynamic Island)\n2. Tap "App battery usage" (or Battery)\n3. Set to "Unrestricted"\n4. In Nothing OS Recents, tap the app icon and tap "Lock" to prevent clearing.</string>
+</resources>

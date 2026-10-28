@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Dynamic Island pill symbol -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,42h32c6.6,0 12,5.4 12,12s-5.4,12 -12,12H38c-6.6,0 -12,-5.4 -12,-12s5.4,-12 12,-12z" />
+    <path
+        android:fillColor="#D71921"
+        android:pathData="M54,54m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+</vector>
