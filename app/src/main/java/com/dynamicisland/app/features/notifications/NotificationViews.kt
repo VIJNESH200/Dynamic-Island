@@ -177,3 +177,16 @@ private fun drawableToBitmap(drawable: Drawable): Bitmap {
     drawable.draw(canvas)
     return bitmap
 }
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+fun CompactNotificationPreview() {
+    CompactNotificationBannerView(
+        notification = IslandNotification(
+            title = "Gun & Whip",
+            text = "Bassick",
+            appName = "Spotify",
+            packageName = "com.spotify.music"
+        )
+    )
+}

@@ -415,3 +415,37 @@ fun drawableToBitmap(drawable: Drawable): Bitmap {
     drawable.draw(canvas)
     return bitmap
 }
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+fun CollapsedMusicPreview() {
+    CollapsedMusicView(
+        state = MusicState(
+            title = "Gun & Whip",
+            artist = "Bassick",
+            isPlaying = true,
+            durationMs = 195000L,
+            positionMs = 45000L,
+            packageName = "com.spotify.music"
+        )
+    )
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+fun ExpandedMusicPreview() {
+    ExpandedMusicView(
+        state = MusicState(
+            title = "Gun & Whip",
+            artist = "Bassick",
+            isPlaying = true,
+            durationMs = 195000L,
+            positionMs = 45000L,
+            packageName = "com.spotify.music"
+        ),
+        onPlayPauseClick = {},
+        onPreviousClick = {},
+        onNextClick = {},
+        onSeekTo = {}
+    )
+}

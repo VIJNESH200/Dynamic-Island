@@ -489,3 +489,18 @@ fun MainScreen(
         }
     }
 }
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+fun MainScreenPreview() {
+    MainScreen(
+        isServiceRunning = true,
+        isOverlayPermissionGranted = true,
+        isNotificationAccessGranted = true,
+        onToggleService = {},
+        onRequestOverlayPermission = {},
+        onRequestNotificationAccess = {},
+        onRequestBatteryOptimization = {},
+        onOpenSettings = {}
+    )
+}
