@@ -1,6 +1,7 @@
 package com.dynamicisland.app.overlay
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
 import android.util.Log
@@ -8,6 +9,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.WindowInsets
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
@@ -74,6 +76,9 @@ class DynamicIslandOverlay(
     private val _isManualPreviewActive = MutableStateFlow(false)
     private val _isDismissed = MutableStateFlow(false)
     val isDismissed: StateFlow<Boolean> = _isDismissed.asStateFlow()
+
+    private var lastMusicTrackId: String? = null
+    private var wasMusicPlaying: Boolean = false
 
     private var notificationDismissJob: Job? = null
     private var powerAlertJob: Job? = null
@@ -259,6 +264,9 @@ class DynamicIslandOverlay(
                         onNextClick = {
                             resetAutoHideTimer()
                             musicHelper.skipToNext()
+                        },
+                        onNotificationClick = { notif ->
+                            handleNotificationClick(notif)
                         }
                     )
                 }
@@ -449,11 +457,16 @@ class DynamicIslandOverlay(
      * Stays visible while playing, hides 6 seconds after pause.
      * Does NOT auto-expand: always keeps collapsed pill until tapped.
      */
-    fun setMusicActive(isActive: Boolean) {
-        if (isActive && !_isMusicTriggerActive.value) {
-            // New playback session or unpaused -> restore from dismissed
+    fun setMusicActive(isActive: Boolean, trackId: String = "") {
+        val isNewTrack = trackId.isNotBlank() && trackId != lastMusicTrackId
+        if (isActive && (!_isMusicTriggerActive.value || isNewTrack || !wasMusicPlaying)) {
+            // New playback session or new track -> restore from dismissed
             _isDismissed.value = false
         }
+        if (trackId.isNotBlank()) {
+            lastMusicTrackId = trackId
+        }
+        wasMusicPlaying = isActive
         _isMusicTriggerActive.value = isActive
         if (isActive) {
             if (_uiState.value.activeMode != ActiveMode.NOTIFICATION &&
@@ -467,6 +480,77 @@ class DynamicIslandOverlay(
             }
         }
         updateOverlayVisibility()
+    }
+
+    /**
+     * Handles tap on an incoming notification banner (e.g. "Screen recording saved").
+     * Launches the notification's own PendingIntent or falls back to system gallery/files app.
+     */
+    fun handleNotificationClick(notification: IslandNotification) {
+        Log.d("DI_NOTIF_TAP", "Notification tapped for pkg: ${notification.packageName}")
+        notificationDismissJob?.cancel()
+        _notificationState.value = IslandNotification()
+        updateOverlayVisibility()
+
+        val pendingIntent = notification.contentIntent
+        if (pendingIntent != null) {
+            try {
+                pendingIntent.send()
+                Log.d("DI_NOTIF_TAP", "Successfully executed PendingIntent for ${notification.packageName}")
+                return
+            } catch (e: Exception) {
+                Log.e("DI_NOTIF_TAP", "PendingIntent execution failed: ${e.message}")
+            }
+        }
+
+        fallbackOpenRecordingOrFiles(notification.packageName)
+    }
+
+    private fun fallbackOpenRecordingOrFiles(packageName: String) {
+        try {
+            val videoIntent = Intent(Intent.ACTION_VIEW).apply {
+                type = "video/*"
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+            if (videoIntent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(videoIntent)
+                Log.d("DI_NOTIF_TAP", "Opened fallback video/gallery viewer")
+                return
+            }
+        } catch (e: Exception) {
+            Log.w("DI_NOTIF_TAP", "Fallback video viewer failed: ${e.message}")
+        }
+
+        try {
+            val filesIntent = Intent(Intent.ACTION_VIEW).apply {
+                type = "*/*"
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            if (filesIntent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(filesIntent)
+                Log.d("DI_NOTIF_TAP", "Opened fallback files viewer")
+                return
+            }
+        } catch (e: Exception) {
+            Log.w("DI_NOTIF_TAP", "Fallback files viewer failed: ${e.message}")
+        }
+
+        try {
+            if (packageName.isNotBlank()) {
+                val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+                if (launchIntent != null) {
+                    launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    context.startActivity(launchIntent)
+                    Log.d("DI_NOTIF_TAP", "Fallback launched app package: $packageName")
+                    return
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("DI_NOTIF_TAP", "Fallback package launch failed: ${e.message}")
+        }
+
+        Toast.makeText(context, "Unable to open notification target", Toast.LENGTH_SHORT).show()
+        Log.d("DI_NOTIF_TAP", "Target could not be opened, displayed user alert")
     }
 
     /**

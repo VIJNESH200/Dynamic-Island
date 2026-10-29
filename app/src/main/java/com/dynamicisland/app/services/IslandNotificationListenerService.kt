@@ -1,6 +1,8 @@
 package com.dynamicisland.app.services
 
 import android.app.Notification
+import android.content.ComponentName
+import android.content.Context
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -16,6 +18,25 @@ import com.dynamicisland.app.features.timer.TimerState
 class IslandNotificationListenerService : NotificationListenerService() {
 
     private val tag = "IslandNotifService"
+
+    companion object {
+        @Volatile
+        var isConnected: Boolean = false
+            private set
+
+        fun requestRebindIfDisconnected(context: Context) {
+            if (!isConnected) {
+                try {
+                    Log.d("DI_MUSIC", "Notification listener disconnected. Requesting rebind...")
+                    requestRebind(ComponentName(context, IslandNotificationListenerService::class.java))
+                } catch (e: Exception) {
+                    Log.e("DI_MUSIC", "Failed to requestRebind: ${e.message}")
+                }
+            } else {
+                Log.d("DI_MUSIC", "Notification listener is connected")
+            }
+        }
+    }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
@@ -53,9 +74,11 @@ class IslandNotificationListenerService : NotificationListenerService() {
             val extras = notification.extras ?: return
 
             // Ignore media playback notifications (handled by MusicControllerHelper via MediaSession)
-            if (notification.category == Notification.CATEGORY_TRANSPORT ||
-                extras.containsKey(Notification.EXTRA_MEDIA_SESSION)
-            ) {
+            val isMedia = notification.category == Notification.CATEGORY_TRANSPORT ||
+                    extras.containsKey(Notification.EXTRA_MEDIA_SESSION) ||
+                    extras.containsKey("android.mediaSession") ||
+                    extras.getString(Notification.EXTRA_TEMPLATE)?.contains("MediaStyle") == true
+            if (isMedia) {
                 return
             }
 
@@ -81,7 +104,8 @@ class IslandNotificationListenerService : NotificationListenerService() {
                 appName = appName,
                 title = title,
                 text = text,
-                timestamp = System.currentTimeMillis()
+                timestamp = System.currentTimeMillis(),
+                contentIntent = notification.contentIntent
             )
 
             // Forward to the active Dynamic Island overlay
@@ -110,26 +134,39 @@ class IslandNotificationListenerService : NotificationListenerService() {
     }
 
     private fun isTimerNotification(sbn: StatusBarNotification): Boolean {
-        val notification = sbn.notification ?: return false
         val pkg = sbn.packageName.lowercase()
-        val isClockApp = pkg.contains("deskclock") || pkg.contains("clock") || pkg.contains("timer")
+
+        // BUG 3: Ignore notifications from packages such as system screen recorder
+        if (pkg == "com.android.systemui" ||
+            pkg.startsWith("com.nothing.") ||
+            pkg.startsWith("com.miui.") ||
+            pkg.contains("screenrecord") ||
+            pkg.contains("recorder")
+        ) {
+            return false
+        }
+
+        // BUG 3: Timer detection must only use clock/timer apps, not other apps' notifications or foreground services
+        val isClockApp = pkg.contains("deskclock") || pkg.contains("clock") || pkg == "com.google.android.deskclock"
+        if (!isClockApp) {
+            return false
+        }
+
+        val notification = sbn.notification ?: return false
         val category = notification.category?.lowercase() ?: ""
         val isTimerCategory = category == Notification.CATEGORY_STOPWATCH ||
                 category == Notification.CATEGORY_ALARM ||
-                category == Notification.CATEGORY_PROGRESS ||
                 category == "stopwatch" ||
                 category == "timer"
+
         val extras = notification.extras
-        val hasChronometer = extras != null && (
-                extras.containsKey(Notification.EXTRA_CHRONOMETER_COUNT_DOWN) ||
-                extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)
-        )
+        val hasChronometer = extras != null && extras.containsKey(Notification.EXTRA_CHRONOMETER_COUNT_DOWN)
         val title = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.lowercase() ?: ""
         val text = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.lowercase() ?: ""
         val hasTimerKeywords = title.contains("timer") || text.contains("timer") ||
                 title.contains("stopwatch") || text.contains("stopwatch")
 
-        return isClockApp || isTimerCategory || hasChronometer || hasTimerKeywords
+        return isTimerCategory || hasChronometer || hasTimerKeywords
     }
 
     private fun processTimerNotification(sbn: StatusBarNotification) {
@@ -165,11 +202,13 @@ class IslandNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        Log.d(tag, "Notification listener connected")
+        isConnected = true
+        Log.d("DI_MUSIC", "Notification listener connected")
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
-        Log.d(tag, "Notification listener disconnected")
+        isConnected = false
+        Log.d("DI_MUSIC", "Notification listener disconnected")
     }
 }

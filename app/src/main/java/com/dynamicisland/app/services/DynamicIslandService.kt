@@ -75,9 +75,10 @@ class DynamicIslandService : Service() {
                 musicHelper.musicState,
                 preferences.isMusicFeatureEnabled
             ) { musicState, isEnabled ->
-                isEnabled && musicState.isDisplayActive
-            }.collect { shouldShowMusic ->
-                overlay?.setMusicActive(shouldShowMusic)
+                val trackId = "${musicState.packageName}:${musicState.title}:${musicState.artist}"
+                Pair(isEnabled && musicState.isDisplayActive, trackId)
+            }.collect { (shouldShowMusic, trackId) ->
+                overlay?.setMusicActive(shouldShowMusic, trackId)
             }
         }
 

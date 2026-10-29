@@ -8,9 +8,9 @@ import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import com.dynamicisland.app.services.IslandNotificationListenerService
-import android.os.SystemClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -37,27 +37,10 @@ class MusicControllerHelper(private val context: Context) {
 
     private var activeController: MediaController? = null
     private var mediaSessionManager: MediaSessionManager? = null
+    private val registeredControllers = mutableMapOf<MediaController, MediaController.Callback>()
 
     private var playbackTickerJob: Job? = null
     private var pauseGracePeriodJob: Job? = null
-
-    private val controllerCallback = object : MediaController.Callback() {
-        override fun onPlaybackStateChanged(state: PlaybackState?) {
-            updateFromController(activeController)
-        }
-
-        override fun onMetadataChanged(metadata: MediaMetadata?) {
-            updateFromController(activeController)
-        }
-
-        override fun onSessionDestroyed() {
-            playbackTickerJob?.cancel()
-            pauseGracePeriodJob?.cancel()
-            activeController = null
-            _musicState.value = MusicState()
-            findAndAttachActiveSession()
-        }
-    }
 
     private val sessionsChangedListener = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
         mainHandler.post {
@@ -67,6 +50,9 @@ class MusicControllerHelper(private val context: Context) {
 
     fun start() {
         try {
+            IslandNotificationListenerService.requestRebindIfDisconnected(context)
+            Log.d("DI_MUSIC", "Starting MusicControllerHelper. Listener connected: ${IslandNotificationListenerService.isConnected}")
+
             mediaSessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
             val notificationListener = ComponentName(context, IslandNotificationListenerService::class.java)
 
@@ -75,14 +61,15 @@ class MusicControllerHelper(private val context: Context) {
                 sessionsChangedListener,
                 notificationListener
             )
+            Log.d("DI_MUSIC", "Registered addOnActiveSessionsChangedListener")
 
             // Initial query
             findAndAttachActiveSession()
         } catch (e: SecurityException) {
-            Log.w(tag, "Notification access not granted for MediaSessionManager: ${e.message}")
+            Log.w("DI_MUSIC", "Notification access not granted for MediaSessionManager: ${e.message}")
             _musicState.value = MusicState()
         } catch (e: Exception) {
-            Log.e(tag, "Error starting MusicControllerHelper: ${e.message}")
+            Log.e("DI_MUSIC", "Error starting MusicControllerHelper: ${e.message}")
             _musicState.value = MusicState()
         }
     }
@@ -91,12 +78,22 @@ class MusicControllerHelper(private val context: Context) {
         try {
             playbackTickerJob?.cancel()
             pauseGracePeriodJob?.cancel()
-            activeController?.unregisterCallback(controllerCallback)
-            activeController = null
+            cleanupControllers()
             mediaSessionManager?.removeOnActiveSessionsChangedListener(sessionsChangedListener)
+            Log.d("DI_MUSIC", "Stopped MusicControllerHelper")
         } catch (e: Exception) {
             Log.w(tag, "Error stopping MusicControllerHelper: ${e.message}")
         }
+    }
+
+    private fun cleanupControllers() {
+        for ((c, cb) in registeredControllers) {
+            try {
+                c.unregisterCallback(cb)
+            } catch (_: Exception) {}
+        }
+        registeredControllers.clear()
+        activeController = null
     }
 
     fun play() {
@@ -148,39 +145,97 @@ class MusicControllerHelper(private val context: Context) {
     }
 
     private fun findAndAttachActiveSession() {
+        IslandNotificationListenerService.requestRebindIfDisconnected(context)
         val manager = mediaSessionManager ?: return
         val component = ComponentName(context, IslandNotificationListenerService::class.java)
         try {
             val controllers = manager.getActiveSessions(component)
+            Log.d("DI_MUSIC", "getActiveSessions returned ${controllers?.size ?: 0} sessions")
             handleActiveSessionsChanged(controllers)
         } catch (e: SecurityException) {
-            Log.w(tag, "Cannot access active sessions without notification listener permission: ${e.message}")
+            Log.w("DI_MUSIC", "Cannot access active sessions without notification listener permission: ${e.message}")
         } catch (e: Exception) {
-            Log.e(tag, "Error querying active sessions: ${e.message}")
+            Log.e("DI_MUSIC", "Error querying active sessions: ${e.message}")
         }
     }
 
     private fun handleActiveSessionsChanged(controllers: List<MediaController>?) {
+        Log.d("DI_MUSIC", "handleActiveSessionsChanged count: ${controllers?.size ?: 0}")
         if (controllers.isNullOrEmpty()) {
             playbackTickerJob?.cancel()
             pauseGracePeriodJob?.cancel()
-            activeController?.unregisterCallback(controllerCallback)
-            activeController = null
+            cleanupControllers()
             _musicState.value = MusicState()
             return
         }
 
-        // Find playing controller, or fallback to the first active controller
-        val playingController = controllers.firstOrNull {
-            it.playbackState?.state == PlaybackState.STATE_PLAYING
-        } ?: controllers.firstOrNull()
+        val currentControllers = controllers
 
-        if (activeController?.sessionToken != playingController?.sessionToken) {
-            activeController?.unregisterCallback(controllerCallback)
-            activeController = playingController
-            activeController?.registerCallback(controllerCallback, mainHandler)
+        // Unregister controllers no longer present
+        val toRemove = registeredControllers.keys.filter { existing ->
+            currentControllers.none { it.sessionToken == existing.sessionToken }
+        }
+        for (c in toRemove) {
+            val cb = registeredControllers.remove(c)
+            if (cb != null) {
+                try {
+                    c.unregisterCallback(cb)
+                    Log.d("DI_MUSIC", "Unregistered callback for removed controller: ${c.packageName}")
+                } catch (e: Exception) {
+                    Log.w("DI_MUSIC", "Error unregistering callback: ${e.message}")
+                }
+            }
         }
 
+        // Register a callback on each active MediaController
+        for (controller in currentControllers) {
+            val alreadyRegistered = registeredControllers.keys.any { it.sessionToken == controller.sessionToken }
+            if (!alreadyRegistered) {
+                val callback = object : MediaController.Callback() {
+                    override fun onPlaybackStateChanged(state: PlaybackState?) {
+                        Log.d("DI_MUSIC", "onPlaybackStateChanged: pkg=${controller.packageName}, state=${state?.state}")
+                        if (state?.state == PlaybackState.STATE_PLAYING) {
+                            activeController = controller
+                        }
+                        updateFromController(activeController ?: controller)
+                    }
+
+                    override fun onMetadataChanged(metadata: MediaMetadata?) {
+                        Log.d("DI_MUSIC", "onMetadataChanged: pkg=${controller.packageName}")
+                        if (controller.playbackState?.state == PlaybackState.STATE_PLAYING) {
+                            activeController = controller
+                        }
+                        updateFromController(activeController ?: controller)
+                    }
+
+                    override fun onSessionDestroyed() {
+                        Log.d("DI_MUSIC", "onSessionDestroyed: pkg=${controller.packageName}")
+                        registeredControllers.remove(controller)
+                        if (activeController?.sessionToken == controller.sessionToken) {
+                            activeController = null
+                            playbackTickerJob?.cancel()
+                            pauseGracePeriodJob?.cancel()
+                            _musicState.value = MusicState()
+                            findAndAttachActiveSession()
+                        }
+                    }
+                }
+                try {
+                    controller.registerCallback(callback, mainHandler)
+                    registeredControllers[controller] = callback
+                    Log.d("DI_MUSIC", "Registered callback on controller: ${controller.packageName}")
+                } catch (e: Exception) {
+                    Log.e("DI_MUSIC", "Failed to register callback for ${controller.packageName}: ${e.message}")
+                }
+            }
+        }
+
+        // Prioritize a controller currently in STATE_PLAYING
+        val playingController = currentControllers.firstOrNull {
+            it.playbackState?.state == PlaybackState.STATE_PLAYING
+        } ?: activeController ?: currentControllers.firstOrNull()
+
+        activeController = playingController
         updateFromController(activeController)
     }
 
@@ -223,6 +278,7 @@ class MusicControllerHelper(private val context: Context) {
         val shouldDisplay: Boolean
 
         if (isPlaying && hasTrack) {
+            Log.d("DI_MUSIC", "PlaybackState.STATE_PLAYING active trigger for ${controller.packageName}")
             pauseGracePeriodJob?.cancel()
             shouldDisplay = true
             startPlaybackTicker(controller)
@@ -235,6 +291,7 @@ class MusicControllerHelper(private val context: Context) {
                     pauseGracePeriodJob = helperScope.launch {
                         delay(6000)
                         if (!_musicState.value.isPlaying) {
+                            Log.d("DI_MUSIC", "6s grace period ended, hiding music trigger")
                             _musicState.value = _musicState.value.copy(isDisplayActive = false)
                         }
                     }

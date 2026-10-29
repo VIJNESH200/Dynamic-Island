@@ -7,6 +7,7 @@ import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,7 +50,8 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun CompactNotificationBannerView(
     notification: IslandNotification,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val appIconBitmap = remember(notification.packageName) {
@@ -76,6 +78,13 @@ fun CompactNotificationBannerView(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.08f),
                 shape = RoundedCornerShape(28.dp)
+            )
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(onClick = onClick)
+                } else {
+                    Modifier
+                }
             )
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -152,17 +161,19 @@ fun CompactNotificationBannerView(
 @Composable
 fun CollapsedNotificationView(
     notification: IslandNotification,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
 ) {
-    CompactNotificationBannerView(notification = notification, modifier = modifier)
+    CompactNotificationBannerView(notification = notification, modifier = modifier, onClick = onClick)
 }
 
 @Composable
 fun ExpandedNotificationView(
     notification: IslandNotification,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
 ) {
-    CompactNotificationBannerView(notification = notification, modifier = modifier)
+    CompactNotificationBannerView(notification = notification, modifier = modifier, onClick = onClick)
 }
 
 private fun drawableToBitmap(drawable: Drawable): Bitmap {

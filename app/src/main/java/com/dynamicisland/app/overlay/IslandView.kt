@@ -93,6 +93,7 @@ fun IslandView(
     onPlayPauseClick: () -> Unit,
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
+    onNotificationClick: (IslandNotification) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -265,7 +266,9 @@ fun IslandView(
                     indication = null
                 ) {
                     onTouchInteraction()
-                    if (isExpanded) {
+                    if (effectiveMode == ActiveMode.NOTIFICATION) {
+                        onNotificationClick(notificationState)
+                    } else if (isExpanded) {
                         onCollapseRequest()
                     } else {
                         onExpandRequest()
@@ -297,7 +300,10 @@ fun IslandView(
                             )
                         }
                         ActiveMode.NOTIFICATION -> {
-                            CompactNotificationBannerView(notification = notificationState)
+                            CompactNotificationBannerView(
+                                notification = notificationState,
+                                onClick = { onNotificationClick(notificationState) }
+                            )
                         }
                         ActiveMode.TIMER -> {
                             ExpandedTimerView(state = timerState)
@@ -366,7 +372,10 @@ fun IslandView(
                             CollapsedMusicView(state = musicState)
                         }
                         ActiveMode.NOTIFICATION -> {
-                            CompactNotificationBannerView(notification = notificationState)
+                            CompactNotificationBannerView(
+                                notification = notificationState,
+                                onClick = { onNotificationClick(notificationState) }
+                            )
                         }
                         ActiveMode.TIMER -> {
                             CollapsedTimerView(state = timerState)
