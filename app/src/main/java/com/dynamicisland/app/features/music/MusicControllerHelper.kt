@@ -194,6 +194,7 @@ class MusicControllerHelper(private val context: Context) {
                 val callback = object : MediaController.Callback() {
                     override fun onPlaybackStateChanged(state: PlaybackState?) {
                         Log.d("DI_MUSIC", "onPlaybackStateChanged: pkg=${controller.packageName}, state=${state?.state}")
+                        Log.d("DI_UI", "MusicControllerHelper.onPlaybackStateChanged: pkg=${controller.packageName}, state=${state?.state}")
                         if (state?.state == PlaybackState.STATE_PLAYING) {
                             activeController = controller
                         }
@@ -202,6 +203,7 @@ class MusicControllerHelper(private val context: Context) {
 
                     override fun onMetadataChanged(metadata: MediaMetadata?) {
                         Log.d("DI_MUSIC", "onMetadataChanged: pkg=${controller.packageName}")
+                        Log.d("DI_UI", "MusicControllerHelper.onMetadataChanged: pkg=${controller.packageName}")
                         if (controller.playbackState?.state == PlaybackState.STATE_PLAYING) {
                             activeController = controller
                         }
@@ -331,6 +333,7 @@ class MusicControllerHelper(private val context: Context) {
                 val updatedPos = (pbState.position + (elapsed * speed).toLong())
                     .coerceIn(0L, if (duration > 0) duration else Long.MAX_VALUE)
 
+                Log.d("DI_UI", "MusicControllerHelper.startPlaybackTicker: tick, pkg=${controller.packageName}")
                 _musicState.value = _musicState.value.copy(positionMs = updatedPos)
             }
         }

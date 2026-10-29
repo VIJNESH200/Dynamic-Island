@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /**
@@ -77,7 +78,8 @@ class DynamicIslandService : Service() {
             ) { musicState, isEnabled ->
                 val trackId = "${musicState.packageName}:${musicState.title}:${musicState.artist}"
                 Pair(isEnabled && musicState.isDisplayActive, trackId)
-            }.collect { (shouldShowMusic, trackId) ->
+            }.distinctUntilChanged()
+            .collect { (shouldShowMusic, trackId) ->
                 overlay?.setMusicActive(shouldShowMusic, trackId)
             }
         }

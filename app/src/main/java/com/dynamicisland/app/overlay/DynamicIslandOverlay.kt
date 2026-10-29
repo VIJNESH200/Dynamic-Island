@@ -379,7 +379,7 @@ class DynamicIslandOverlay(
         if (!isOverlayAttached) return
         if (_uiState.value.isExpanded || isAnimating) return
 
-        Log.d("DI_UI", "expand")
+        Log.d("DI_UI", "DynamicIslandOverlay.expand() called, current=${_uiState.value.expansionState}")
         isAnimating = true
 
         // Resize WindowManager window to expanded size BEFORE starting expand animation
@@ -402,7 +402,7 @@ class DynamicIslandOverlay(
         if (!isOverlayAttached) return
         if (!_uiState.value.isExpanded || isAnimating) return
 
-        Log.d("DI_UI", "collapse")
+        Log.d("DI_UI", "DynamicIslandOverlay.collapse() called, current=${_uiState.value.expansionState}")
         isAnimating = true
 
         _uiState.value = _uiState.value.copy(expansionState = ExpansionState.COLLAPSED)
@@ -509,10 +509,12 @@ class DynamicIslandOverlay(
                 _uiState.value.activeMode != ActiveMode.BATTERY &&
                 _uiState.value.activeMode != ActiveMode.FIRST_TIME_INTRO
             ) {
-                _uiState.value = _uiState.value.copy(
-                    activeMode = ActiveMode.MUSIC,
-                    expansionState = ExpansionState.COLLAPSED
-                )
+                if (_uiState.value.activeMode != ActiveMode.MUSIC) {
+                    _uiState.value = _uiState.value.copy(
+                        activeMode = ActiveMode.MUSIC,
+                        expansionState = ExpansionState.COLLAPSED
+                    )
+                }
             }
         }
         updateOverlayVisibility()
@@ -678,7 +680,7 @@ class DynamicIslandOverlay(
         val extraOffset = preferences.verticalOffsetDp.value
         val topOffsetPx = ((statusBarHeight + STATUS_BAR_GAP_DP + extraOffset) * density).roundToInt()
 
-        return WindowManager.LayoutParams(
+        val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -693,6 +695,13 @@ class DynamicIslandOverlay(
             x = 0
             y = topOffsetPx
         }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            params.flags = params.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
+            params.setBlurBehindRadius(0)
+        }
+
+        return params
     }
 
     private fun createExpandedParams(): WindowManager.LayoutParams {
@@ -717,10 +726,13 @@ class DynamicIslandOverlay(
             y = topOffsetPx
         }
 
-        // On Android 12+ (API 31+), apply background blur to the card's window background
+        // On Android 12+ (API 31+), blur what is behind the card window only when expanded and glass style enabled
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && preferences.isGlassStyleEnabled.value) {
             params.flags = params.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
-            params.setBlurBehindRadius(20)
+            params.setBlurBehindRadius(40)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            params.flags = params.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
+            params.setBlurBehindRadius(0)
         }
 
         return params

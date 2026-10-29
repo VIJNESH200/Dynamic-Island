@@ -32,7 +32,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
-import android.os.Build
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,8 +45,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asComposeRenderEffect
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -184,21 +181,21 @@ fun IslandView(
         modifier = modifier.wrapContentSize(Alignment.TopCenter),
         contentAlignment = Alignment.TopCenter
     ) {
-        // Card / Pill Background & Border styling (Item 2: Glass style behind setting)
+        // Card / Pill Background & Border styling (Part 2: Glass style behind setting)
         val cardBackgroundColor = if (isExpanded && isGlassStyleEnabled) {
-            Color.Black.copy(alpha = 0.70f)
+            Color.Black.copy(alpha = 0.60f)
         } else {
             Color.Black
         }
 
         val cardBorderColor = if (isExpanded && isGlassStyleEnabled) {
-            Color.White.copy(alpha = 0.12f)
+            Color.White.copy(alpha = 0.14f)
         } else {
             Color.White.copy(alpha = 0.08f)
         }
 
         val cardElevation = if (isExpanded) {
-            if (isGlassStyleEnabled) 16.dp else 12.dp
+            16.dp
         } else {
             4.dp
         }
@@ -311,22 +308,6 @@ fun IslandView(
                 },
             contentAlignment = Alignment.Center
         ) {
-            // Android 12+ background blur layer for glass card
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && isExpanded && isGlassStyleEnabled) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clip(RoundedCornerShape(animatedCornerRadius))
-                        .graphicsLayer {
-                            renderEffect = android.graphics.RenderEffect.createBlurEffect(
-                                20f,
-                                20f,
-                                android.graphics.Shader.TileMode.CLAMP
-                            ).asComposeRenderEffect()
-                        }
-                        .background(Color.Black.copy(alpha = 0.70f))
-                )
-            }
             AnimatedContent(
                 targetState = isExpanded,
                 transitionSpec = {
