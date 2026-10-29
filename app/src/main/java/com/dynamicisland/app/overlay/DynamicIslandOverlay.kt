@@ -79,6 +79,7 @@ class DynamicIslandOverlay(
 
     private var lastMusicTrackId: String? = null
     private var wasMusicPlaying: Boolean = false
+    private var isAnimating: Boolean = false
 
     private var notificationDismissJob: Job? = null
     private var powerAlertJob: Job? = null
@@ -106,6 +107,18 @@ class DynamicIslandOverlay(
         overlayScope.launch {
             preferences.autoHideSeconds.collect {
                 resetAutoHideTimer()
+            }
+        }
+
+        // Observe glass style setting changes
+        overlayScope.launch {
+            preferences.isGlassStyleEnabled.collect {
+                if (isOverlayAttached && composeView != null) {
+                    val params = if (_uiState.value.isExpanded) createExpandedParams() else createCollapsedParams()
+                    try {
+                        windowManager.updateViewLayout(composeView, params)
+                    } catch (_: Exception) {}
+                }
             }
         }
     }
@@ -203,7 +216,7 @@ class DynamicIslandOverlay(
                 // Intercept touches outside the card window bounds using FLAG_WATCH_OUTSIDE_TOUCH
                 setOnTouchListener { _, event ->
                     if (event.action == MotionEvent.ACTION_OUTSIDE) {
-                        if (_uiState.value.isExpanded) {
+                        if (!isAnimating && _uiState.value.isExpanded) {
                             collapse()
                         }
                         return@setOnTouchListener false
@@ -223,6 +236,7 @@ class DynamicIslandOverlay(
                     val isMusicEnabled by preferences.isMusicFeatureEnabled.collectAsState()
                     val isNotificationEnabled by preferences.isNotificationFeatureEnabled.collectAsState()
                     val isTimerEnabled by preferences.isTimerFeatureEnabled.collectAsState()
+                    val isGlassEnabled by preferences.isGlassStyleEnabled.collectAsState()
 
                     IslandView(
                         uiState = currentUiState,
@@ -235,6 +249,7 @@ class DynamicIslandOverlay(
                         isMusicEnabled = isMusicEnabled,
                         isNotificationEnabled = isNotificationEnabled,
                         isTimerEnabled = isTimerEnabled,
+                        isGlassStyleEnabled = isGlassEnabled,
                         onExpandRequest = {
                             resetAutoHideTimer()
                             expand()
@@ -357,19 +372,39 @@ class DynamicIslandOverlay(
 
     /**
      * Expands the island smoothly into a card.
+     * The WindowManager window is resized to the expanded size BEFORE the expand animation starts.
+     * The collapse path cannot run while the expand animation is in progress.
      */
     fun expand() {
         if (!isOverlayAttached) return
-        _uiState.value = _uiState.value.copy(expansionState = ExpansionState.EXPANDED)
+        if (_uiState.value.isExpanded || isAnimating) return
+
+        Log.d("DI_UI", "expand")
+        isAnimating = true
+
+        // Resize WindowManager window to expanded size BEFORE starting expand animation
         updateWindowLayoutParams(isExpanded = true)
+
+        _uiState.value = _uiState.value.copy(expansionState = ExpansionState.EXPANDED)
         resetAutoHideTimer()
+
+        overlayScope.launch {
+            delay(350)
+            isAnimating = false
+        }
     }
 
     /**
      * Collapses the island back to the small pill.
+     * Guarded by isAnimating so it cannot interrupt an expand animation in progress.
      */
     fun collapse() {
         if (!isOverlayAttached) return
+        if (!_uiState.value.isExpanded || isAnimating) return
+
+        Log.d("DI_UI", "collapse")
+        isAnimating = true
+
         _uiState.value = _uiState.value.copy(expansionState = ExpansionState.COLLAPSED)
 
         overlayScope.launch {
@@ -377,6 +412,7 @@ class DynamicIslandOverlay(
             if (_uiState.value.isCollapsed && isOverlayAttached) {
                 updateWindowLayoutParams(isExpanded = false)
             }
+            isAnimating = false
         }
         resetAutoHideTimer()
     }
@@ -483,74 +519,85 @@ class DynamicIslandOverlay(
     }
 
     /**
-     * Handles tap on an incoming notification banner (e.g. "Screen recording saved").
-     * Launches the notification's own PendingIntent or falls back to system gallery/files app.
+     * Handles tap on an incoming notification banner:
+     * - First try notification.contentIntent.send().
+     * - If that fails or is null, open the app with packageManager.getLaunchIntentForPackage(packageName) with FLAG_ACTIVITY_NEW_TASK.
+     * - If neither works, show a toast: "Can't open this app".
+     * - Dismiss the island after opening the app.
+     * - Log each tap with tag "DI_NOTIF_TAP" and include only the package name.
+     * - Fallback to Gallery or Files only applies to recording notifications from known recorder packages.
      */
     fun handleNotificationClick(notification: IslandNotification) {
-        Log.d("DI_NOTIF_TAP", "Notification tapped for pkg: ${notification.packageName}")
+        val packageName = notification.packageName
+        Log.d("DI_NOTIF_TAP", packageName)
+
         notificationDismissJob?.cancel()
         _notificationState.value = IslandNotification()
-        updateOverlayVisibility()
+        dismiss() // Dismiss the island after opening the app
 
+        var appOpened = false
+
+        // 1. First try notification.contentIntent.send()
         val pendingIntent = notification.contentIntent
         if (pendingIntent != null) {
             try {
                 pendingIntent.send()
-                Log.d("DI_NOTIF_TAP", "Successfully executed PendingIntent for ${notification.packageName}")
-                return
-            } catch (e: Exception) {
-                Log.e("DI_NOTIF_TAP", "PendingIntent execution failed: ${e.message}")
+                appOpened = true
+            } catch (_: Exception) {
+                appOpened = false
             }
         }
 
-        fallbackOpenRecordingOrFiles(notification.packageName)
-    }
+        // 2. Fallback to Gallery or Files only for known recorder packages
+        if (!appOpened) {
+            val pkgLower = packageName.lowercase()
+            val isRecorder = pkgLower.contains("screenrecord") || pkgLower.contains("recorder")
+            if (isRecorder) {
+                try {
+                    val videoIntent = Intent(Intent.ACTION_VIEW).apply {
+                        type = "video/*"
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    }
+                    if (videoIntent.resolveActivity(context.packageManager) != null) {
+                        context.startActivity(videoIntent)
+                        appOpened = true
+                    }
+                } catch (_: Exception) {}
 
-    private fun fallbackOpenRecordingOrFiles(packageName: String) {
-        try {
-            val videoIntent = Intent(Intent.ACTION_VIEW).apply {
-                type = "video/*"
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
-            }
-            if (videoIntent.resolveActivity(context.packageManager) != null) {
-                context.startActivity(videoIntent)
-                Log.d("DI_NOTIF_TAP", "Opened fallback video/gallery viewer")
-                return
-            }
-        } catch (e: Exception) {
-            Log.w("DI_NOTIF_TAP", "Fallback video viewer failed: ${e.message}")
-        }
-
-        try {
-            val filesIntent = Intent(Intent.ACTION_VIEW).apply {
-                type = "*/*"
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            if (filesIntent.resolveActivity(context.packageManager) != null) {
-                context.startActivity(filesIntent)
-                Log.d("DI_NOTIF_TAP", "Opened fallback files viewer")
-                return
-            }
-        } catch (e: Exception) {
-            Log.w("DI_NOTIF_TAP", "Fallback files viewer failed: ${e.message}")
-        }
-
-        try {
-            if (packageName.isNotBlank()) {
-                val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
-                if (launchIntent != null) {
-                    launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    context.startActivity(launchIntent)
-                    Log.d("DI_NOTIF_TAP", "Fallback launched app package: $packageName")
-                    return
+                if (!appOpened) {
+                    try {
+                        val filesIntent = Intent(Intent.ACTION_VIEW).apply {
+                            type = "*/*"
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        if (filesIntent.resolveActivity(context.packageManager) != null) {
+                            context.startActivity(filesIntent)
+                            appOpened = true
+                        }
+                    } catch (_: Exception) {}
                 }
             }
-        } catch (e: Exception) {
-            Log.w("DI_NOTIF_TAP", "Fallback package launch failed: ${e.message}")
         }
 
-        Toast.makeText(context, "Unable to open notification target", Toast.LENGTH_SHORT).show()
-        Log.d("DI_NOTIF_TAP", "Target could not be opened, displayed user alert")
+        // 3. Fallback: open the app with packageManager.getLaunchIntentForPackage(packageName)
+        if (!appOpened && packageName.isNotBlank()) {
+            try {
+                val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                if (launchIntent != null) {
+                    context.startActivity(launchIntent)
+                    appOpened = true
+                }
+            } catch (_: Exception) {
+                appOpened = false
+            }
+        }
+
+        // 4. If neither works, show toast: "Can't open this app"
+        if (!appOpened) {
+            Toast.makeText(context, "Can't open this app", Toast.LENGTH_SHORT).show()
+        }
     }
 
     /**
@@ -654,7 +701,7 @@ class DynamicIslandOverlay(
         val extraOffset = preferences.verticalOffsetDp.value
         val topOffsetPx = ((statusBarHeight + STATUS_BAR_GAP_DP + extraOffset) * density).roundToInt()
 
-        return WindowManager.LayoutParams(
+        val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -669,6 +716,14 @@ class DynamicIslandOverlay(
             x = 0
             y = topOffsetPx
         }
+
+        // On Android 12+ (API 31+), apply background blur to the card's window background
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && preferences.isGlassStyleEnabled.value) {
+            params.flags = params.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+            params.setBlurBehindRadius(20)
+        }
+
+        return params
     }
 
     /**

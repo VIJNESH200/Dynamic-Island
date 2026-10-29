@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.HourglassBottom
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
@@ -71,6 +72,8 @@ fun SettingsScreen(
     val isMusicEnabled by preferences.isMusicFeatureEnabled.collectAsState()
     val isNotificationEnabled by preferences.isNotificationFeatureEnabled.collectAsState()
     val isTimerEnabled by preferences.isTimerFeatureEnabled.collectAsState()
+    val isGlassEnabled by preferences.isGlassStyleEnabled.collectAsState()
+    val isShowIslandInsteadOfPopups by preferences.isShowIslandInsteadOfPopups.collectAsState()
     val autoHideSeconds by preferences.autoHideSeconds.collectAsState()
     val verticalOffset by preferences.verticalOffsetDp.collectAsState()
     val pillWidth by preferences.pillWidthDp.collectAsState()
@@ -265,6 +268,63 @@ fun SettingsScreen(
                 }
             }
 
+            // Show island instead of pop-ups (Item 4)
+            NothingCard {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = null,
+                                tint = if (isShowIslandInsteadOfPopups) NothingRed else NothingGrayText,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Show island instead of pop-ups",
+                                    color = NothingWhite,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Display incoming alerts on the Dynamic Island",
+                                    color = NothingGrayText,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        NothingSwitch(
+                            checked = isShowIslandInsteadOfPopups,
+                            onCheckedChange = { preferences.setShowIslandInsteadOfPopups(it) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "To stop the system's floating pop-ups for other apps, turn them off in Settings > Notifications > Pop-up notifications (on Nothing OS, this may be listed as Floating notifications). The island cannot change that setting for other apps.",
+                        color = NothingGrayText,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+
             // Timer Trigger Toggle
             NothingCard {
                 Row(
@@ -367,6 +427,61 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+            }
+
+            // Appearance & Style Section (Item 2)
+            Text(
+                text = "APPEARANCE & STYLE",
+                color = NothingGrayText,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 1.sp
+            )
+
+            // Glass Style Toggle
+            NothingCard {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Layers,
+                            contentDescription = null,
+                            tint = if (isGlassEnabled) NothingWhite else NothingGrayText,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Glass style",
+                                color = NothingWhite,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Semi-transparent card (70% opacity) with subtle white border & background blur",
+                                color = NothingGrayText,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    NothingSwitch(
+                        checked = isGlassEnabled,
+                        onCheckedChange = { preferences.setGlassStyleEnabled(it) }
+                    )
                 }
             }
 

@@ -32,17 +32,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import android.os.Build
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -94,10 +99,12 @@ fun IslandView(
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
     onNotificationClick: (IslandNotification) -> Unit = {},
+    isGlassStyleEnabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
     val dragOffsetY = remember { Animatable(0f) }
+    var lastTapTimestamp by remember { mutableLongStateOf(0L) }
 
     // Spring animation spec: smooth and slightly bouncy
     val springSpec = spring<androidx.compose.ui.unit.Dp>(
@@ -177,6 +184,25 @@ fun IslandView(
         modifier = modifier.wrapContentSize(Alignment.TopCenter),
         contentAlignment = Alignment.TopCenter
     ) {
+        // Card / Pill Background & Border styling (Item 2: Glass style behind setting)
+        val cardBackgroundColor = if (isExpanded && isGlassStyleEnabled) {
+            Color.Black.copy(alpha = 0.70f)
+        } else {
+            Color.Black
+        }
+
+        val cardBorderColor = if (isExpanded && isGlassStyleEnabled) {
+            Color.White.copy(alpha = 0.12f)
+        } else {
+            Color.White.copy(alpha = 0.08f)
+        }
+
+        val cardElevation = if (isExpanded) {
+            if (isGlassStyleEnabled) 16.dp else 12.dp
+        } else {
+            4.dp
+        }
+
         // The Island Pill / Card
         Box(
             modifier = Modifier
@@ -184,14 +210,14 @@ fun IslandView(
                 .width(animatedWidth)
                 .height(animatedHeight)
                 .shadow(
-                    elevation = if (isExpanded) 12.dp else 4.dp,
+                    elevation = cardElevation,
                     shape = RoundedCornerShape(animatedCornerRadius)
                 )
                 .clip(RoundedCornerShape(animatedCornerRadius))
-                .background(Color.Black) // Pitch black OLED pill
+                .background(cardBackgroundColor)
                 .border(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.08f), // Item 2: subtle 1dp border (white at 8% opacity)
+                    color = cardBorderColor,
                     shape = RoundedCornerShape(animatedCornerRadius)
                 )
                 // Gesture handling: Swipe UP to dismiss, Swipe DOWN on collapsed pill to expand
@@ -223,6 +249,10 @@ fun IslandView(
                                             stiffness = Spring.StiffnessLow
                                         )
                                     )
+                                }
+                                val now = System.currentTimeMillis()
+                                if (now - lastTapTimestamp >= 400L) {
+                                    lastTapTimestamp = now
                                     onExpandRequest()
                                 }
                             } else {
@@ -265,6 +295,11 @@ fun IslandView(
                     interactionSource = interactionSource,
                     indication = null
                 ) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastTapTimestamp < 400L) {
+                        return@clickable // Disambiguate and prevent double expand/collapse
+                    }
+                    lastTapTimestamp = now
                     onTouchInteraction()
                     if (effectiveMode == ActiveMode.NOTIFICATION) {
                         onNotificationClick(notificationState)
@@ -276,6 +311,22 @@ fun IslandView(
                 },
             contentAlignment = Alignment.Center
         ) {
+            // Android 12+ background blur layer for glass card
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && isExpanded && isGlassStyleEnabled) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(RoundedCornerShape(animatedCornerRadius))
+                        .graphicsLayer {
+                            renderEffect = android.graphics.RenderEffect.createBlurEffect(
+                                20f,
+                                20f,
+                                android.graphics.Shader.TileMode.CLAMP
+                            ).asComposeRenderEffect()
+                        }
+                        .background(Color.Black.copy(alpha = 0.70f))
+                )
+            }
             AnimatedContent(
                 targetState = isExpanded,
                 transitionSpec = {

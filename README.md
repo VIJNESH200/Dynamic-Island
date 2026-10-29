@@ -21,7 +21,8 @@ An elegant, animated floating pill-shaped overlay for Android, built with **Kotl
    - Appears dynamically only when active triggers occur:
      - **Charger Plug / Unplug**: Displays battery percentage and charging state for 4 seconds, then auto-hides.
      - **Music Playback**: Appears in collapsed state when media plays; auto-hides 6 seconds after pausing. Does not auto-expand.
-     - **Incoming Notifications**: Displays a compact 340dp pill banner with real app icon, app name, title, and body for 5 seconds, then auto-hides.
+     - **Incoming Notifications**: Displays a compact 340dp pill banner with real app icon, app name, title, and body for 5 seconds, then auto-hides. Tapping the notification opens the originating application.
+       > **Note**: To stop the system's floating pop-ups for other apps, turn them off in Settings > Notifications > Pop-up notifications (on Nothing OS, this may be listed as Floating notifications). The island cannot change that setting for other apps.
      - **Active Timer & Stopwatch**: Stays visible while a countdown timer or stopwatch runs.
    - Each trigger can be independently toggled in Settings.
 

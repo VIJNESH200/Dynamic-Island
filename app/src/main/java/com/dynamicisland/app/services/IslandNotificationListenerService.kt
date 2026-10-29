@@ -61,7 +61,7 @@ class IslandNotificationListenerService : NotificationListenerService() {
                 return
             }
 
-            if (!prefs.isNotificationFeatureEnabled.value) {
+            if (!prefs.isNotificationFeatureEnabled.value || !prefs.isShowIslandInsteadOfPopups.value) {
                 return
             }
 

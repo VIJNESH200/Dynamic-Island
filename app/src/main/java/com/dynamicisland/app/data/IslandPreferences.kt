@@ -46,6 +46,14 @@ class IslandPreferences(context: Context) {
     private val _autoHideSeconds = MutableStateFlow(prefs.getInt(KEY_AUTO_HIDE_SECONDS, DEFAULT_AUTO_HIDE_SECONDS))
     val autoHideSeconds: StateFlow<Int> = _autoHideSeconds.asStateFlow()
 
+    // Glass / semi-transparent style for expanded card (default ON)
+    private val _isGlassStyleEnabled = MutableStateFlow(prefs.getBoolean(KEY_GLASS_STYLE, true))
+    val isGlassStyleEnabled: StateFlow<Boolean> = _isGlassStyleEnabled.asStateFlow()
+
+    // Show island instead of pop-ups (default ON)
+    private val _isShowIslandInsteadOfPopups = MutableStateFlow(prefs.getBoolean(KEY_SHOW_ISLAND_INSTEAD_OF_POPUPS, true))
+    val isShowIslandInsteadOfPopups: StateFlow<Boolean> = _isShowIslandInsteadOfPopups.asStateFlow()
+
     fun setIslandEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_ISLAND_ENABLED, enabled).apply()
         _isIslandEnabled.value = enabled
@@ -91,6 +99,16 @@ class IslandPreferences(context: Context) {
         _autoHideSeconds.value = seconds
     }
 
+    fun setGlassStyleEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_GLASS_STYLE, enabled).apply()
+        _isGlassStyleEnabled.value = enabled
+    }
+
+    fun setShowIslandInsteadOfPopups(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SHOW_ISLAND_INSTEAD_OF_POPUPS, enabled).apply()
+        _isShowIslandInsteadOfPopups.value = enabled
+    }
+
     companion object {
         private const val PREFS_NAME = "dynamic_island_prefs"
         private const val KEY_ISLAND_ENABLED = "island_enabled"
@@ -102,6 +120,8 @@ class IslandPreferences(context: Context) {
         private const val KEY_VERTICAL_OFFSET = "vertical_offset_dp"
         private const val KEY_PILL_WIDTH = "pill_width_dp"
         private const val KEY_AUTO_HIDE_SECONDS = "auto_hide_seconds"
+        private const val KEY_GLASS_STYLE = "glass_style_enabled"
+        private const val KEY_SHOW_ISLAND_INSTEAD_OF_POPUPS = "show_island_instead_of_popups"
 
         // Default extra offset: 0dp (pill sits cleanly 4dp below the system status bar)
         const val DEFAULT_OFFSET_DP = 0
