@@ -42,6 +42,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.remember
+import com.dynamicisland.app.features.updater.AppUpdateCard
+import com.dynamicisland.app.features.updater.UpdateManager
 import com.dynamicisland.app.data.IslandPreferences
 import com.dynamicisland.app.ui.components.NothingCard
 import com.dynamicisland.app.ui.components.NothingSwitch
@@ -60,6 +64,8 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
+    val context = LocalContext.current
+    val updateManager = remember { UpdateManager(context) }
 
     val isBatteryEnabled by preferences.isBatteryFeatureEnabled.collectAsState()
     val isMusicEnabled by preferences.isMusicFeatureEnabled.collectAsState()
@@ -481,6 +487,11 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // In-app updater section
+            AppUpdateCard(updateManager = updateManager)
 
             Spacer(modifier = Modifier.height(20.dp))
         }

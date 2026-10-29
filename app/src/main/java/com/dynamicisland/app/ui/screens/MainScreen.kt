@@ -48,6 +48,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.LaunchedEffect
+import com.dynamicisland.app.features.updater.AppUpdateCard
+import com.dynamicisland.app.features.updater.UpdateManager
 import com.dynamicisland.app.features.notifications.IslandNotification
 import com.dynamicisland.app.services.DynamicIslandService
 import com.dynamicisland.app.ui.components.NothingCard
@@ -74,6 +78,13 @@ fun MainScreen(
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
+    val context = LocalContext.current
+    val updateManager = remember { UpdateManager(context) }
+
+    LaunchedEffect(Unit) {
+        // Silently check if a newer release exists on GitHub
+        updateManager.checkForUpdates()
+    }
 
     Scaffold(
         containerColor = PureBlack,
@@ -484,6 +495,11 @@ fun MainScreen(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // In-app updater card
+            AppUpdateCard(updateManager = updateManager)
 
             Spacer(modifier = Modifier.height(16.dp))
         }
