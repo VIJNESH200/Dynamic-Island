@@ -52,6 +52,13 @@ class IslandNotificationListenerService : NotificationListenerService() {
             val notification = sbn.notification ?: return
             val extras = notification.extras ?: return
 
+            // Ignore media playback notifications (handled by MusicControllerHelper via MediaSession)
+            if (notification.category == Notification.CATEGORY_TRANSPORT ||
+                extras.containsKey(Notification.EXTRA_MEDIA_SESSION)
+            ) {
+                return
+            }
+
             val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
             val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
 

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -80,6 +81,7 @@ fun MainScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -434,9 +436,10 @@ fun MainScreen(
                         onClick = {
                             DynamicIslandService.postNotification(
                                 IslandNotification(
-                                    title = "Dynamic Island",
-                                    text = "Ready on CMF Phone 2 Pro! Tap to expand.",
-                                    appName = "Nothing OS"
+                                    title = "Test notification",
+                                    text = "This is a sample alert",
+                                    appName = "Sample App",
+                                    packageName = ""
                                 )
                             )
                         },

@@ -4,8 +4,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.runtime.remember
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -33,18 +31,25 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,38 +57,41 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Animated audio wave equalizer bars showing playing status.
+ * Animated 3-bar sound wave equalizer for idle / unknown duration media.
  */
 @Composable
 fun AudioEqualizerBars(
     isPlaying: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    barColor: Color = Color(0xFFD71921)
 ) {
-    val transition = rememberInfiniteTransition(label = "Equalizer")
+    val transition = rememberInfiniteTransition(label = "EqualizerTransition")
 
-    val h1 by transition.animateFloat(
-        initialValue = 4f,
-        targetValue = if (isPlaying) 14f else 4f,
+    val bar1Height by transition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = if (isPlaying) 1.0f else 0.3f,
         animationSpec = infiniteRepeatable(
-            animation = tween(400, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 400, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "Bar1"
     )
-    val h2 by transition.animateFloat(
-        initialValue = 12f,
-        targetValue = if (isPlaying) 5f else 5f,
+
+    val bar2Height by transition.animateFloat(
+        initialValue = 0.8f,
+        targetValue = if (isPlaying) 0.2f else 0.8f,
         animationSpec = infiniteRepeatable(
-            animation = tween(320, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 550, delayMillis = 100, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "Bar2"
     )
-    val h3 by transition.animateFloat(
-        initialValue = 6f,
-        targetValue = if (isPlaying) 16f else 6f,
+
+    val bar3Height by transition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = if (isPlaying) 0.9f else 0.4f,
         animationSpec = infiniteRepeatable(
-            animation = tween(480, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 450, delayMillis = 50, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "Bar3"
@@ -91,28 +99,27 @@ fun AudioEqualizerBars(
 
     Row(
         modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        val barColor = Color(0xFFD71921) // Nothing Red accent
         Box(
             modifier = Modifier
                 .width(2.5.dp)
-                .height(h1.dp)
+                .height(14.dp * bar1Height)
                 .clip(RoundedCornerShape(1.dp))
                 .background(barColor)
         )
         Box(
             modifier = Modifier
                 .width(2.5.dp)
-                .height(h2.dp)
+                .height(14.dp * bar2Height)
                 .clip(RoundedCornerShape(1.dp))
                 .background(barColor)
         )
         Box(
             modifier = Modifier
                 .width(2.5.dp)
-                .height(h3.dp)
+                .height(14.dp * bar3Height)
                 .clip(RoundedCornerShape(1.dp))
                 .background(barColor)
         )
@@ -120,25 +127,11 @@ fun AudioEqualizerBars(
 }
 
 /**
- * Converts an Android Drawable (including AdaptiveIconDrawable) into a Bitmap.
- */
-fun drawableToBitmap(drawable: Drawable): Bitmap {
-    if (drawable is BitmapDrawable && drawable.bitmap != null) {
-        return drawable.bitmap
-    }
-    val width = drawable.intrinsicWidth.takeIf { it > 0 } ?: 48
-    val height = drawable.intrinsicHeight.takeIf { it > 0 } ?: 48
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
-    drawable.setBounds(0, 0, canvas.width, canvas.height)
-    drawable.draw(canvas)
-    return bitmap
-}
-
-/**
- * Collapsed pill view for music status.
- * Shows the source app's real icon (e.g. Spotify), accompanied by a small progress
- * bar based on playback position and duration (or animated equalizer if duration is unknown).
+ * Collapsed Music Pill (Item 6):
+ * - Left: the media app's real icon (e.g. Spotify).
+ * - Right: small circular progress ring around play/pause symbol that shows elapsed time.
+ *   If duration is unknown, show 3-bar animated equalizer instead.
+ * - Width: ~150dp, height: 36dp.
  */
 @Composable
 fun CollapsedMusicView(
@@ -161,17 +154,20 @@ fun CollapsedMusicView(
     }
 
     Row(
-        modifier = modifier.padding(horizontal = 8.dp),
+        modifier = modifier
+            .width(150.dp)
+            .height(36.dp)
+            .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Source app's real icon (e.g. Spotify), or album art, or fallback music note
+        // Left: Source app's real icon (e.g. Spotify), or album art, or fallback music note
         if (appIconBitmap != null) {
             Image(
                 bitmap = appIconBitmap.asImageBitmap(),
                 contentDescription = "App Icon",
                 modifier = Modifier
-                    .size(18.dp)
+                    .size(20.dp)
                     .clip(CircleShape),
                 contentScale = ContentScale.Crop
             )
@@ -180,7 +176,7 @@ fun CollapsedMusicView(
                 bitmap = state.albumArt.asImageBitmap(),
                 contentDescription = "Album Art",
                 modifier = Modifier
-                    .size(18.dp)
+                    .size(20.dp)
                     .clip(CircleShape),
                 contentScale = ContentScale.Crop
             )
@@ -189,24 +185,31 @@ fun CollapsedMusicView(
                 imageVector = Icons.Default.MusicNote,
                 contentDescription = "Music",
                 tint = Color(0xFFD71921),
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // Next to the icon: small progress bar if duration is known; animated equalizer if unknown
+        // Right: small circular progress ring around play/pause symbol showing elapsed time
+        // If duration is unknown, show 3-bar animated equalizer instead
         if (state.durationMs > 0L) {
-            val progress = (state.positionMs.toFloat() / state.durationMs.toFloat()).coerceIn(0f, 1f)
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier
-                    .width(64.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp)),
-                color = Color.White,
-                trackColor = Color(0xFF333333)
-            )
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(22.dp)
+            ) {
+                CircularProgressIndicator(
+                    progress = { state.progressFraction },
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = Color.White,
+                    trackColor = Color(0xFF333333)
+                )
+                Icon(
+                    imageVector = if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(10.dp)
+                )
+            }
         } else {
             AudioEqualizerBars(
                 isPlaying = state.isPlaying,
@@ -217,7 +220,11 @@ fun CollapsedMusicView(
 }
 
 /**
- * Expanded card view for media controls and track details.
+ * Expanded Music Card (Item 7):
+ * - Rounded card, 340dp wide, 28dp corner radius, black background.
+ * - Top row: album art (56dp, rounded 12dp), track title (bold), artist (gray).
+ * - Middle: thin progress slider with elapsed time on left and total time on right (seeking supported).
+ * - Bottom row: Previous, Play/Pause (larger, in a filled circle), Next, using MediaController.
  */
 @Composable
 fun ExpandedMusicView(
@@ -225,32 +232,35 @@ fun ExpandedMusicView(
     onPlayPauseClick: () -> Unit,
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
+    onSeekTo: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var isSeeking by remember { mutableStateOf(false) }
+    var seekPositionMs by remember { mutableFloatStateOf(0f) }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(18.dp)
     ) {
-        // Track Information Row
+        // Top Row: Album Art (56dp, rounded 12dp), Track Title (bold), Artist (gray)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Album Art or Disc Placeholder
             if (state.albumArt != null) {
                 Image(
                     bitmap = state.albumArt.asImageBitmap(),
                     contentDescription = "Album Art",
                     modifier = Modifier
-                        .size(54.dp)
+                        .size(56.dp)
                         .clip(RoundedCornerShape(12.dp)),
                     contentScale = ContentScale.Crop
                 )
             } else {
                 Box(
                     modifier = Modifier
-                        .size(54.dp)
+                        .size(56.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFF1E1E1E)),
                     contentAlignment = Alignment.Center
@@ -268,16 +278,16 @@ fun ExpandedMusicView(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = state.title.ifBlank { "Unknown Title" },
+                    text = state.title.ifBlank { "No Track Playing" },
                     color = Color.White,
-                    fontSize = 15.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = state.artist.ifBlank { "Unknown Artist" },
+                    text = state.artist.ifBlank { "Media Session" },
                     color = Color(0xFF8E8E93),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Normal,
@@ -286,53 +296,62 @@ fun ExpandedMusicView(
                 )
             }
 
-            // Audio Bars
+            Spacer(modifier = Modifier.width(8.dp))
+
             AudioEqualizerBars(
                 isPlaying = state.isPlaying,
-                modifier = Modifier
-                    .padding(end = 4.dp)
-                    .size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Progress bar
-        if (state.durationMs > 0) {
-            LinearProgressIndicator(
-                progress = { state.progressFraction },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp)),
-                color = Color.White,
-                trackColor = Color(0xFF2C2C2E)
+        // Middle: Progress Slider with Elapsed Time on Left and Total Time on Right
+        val maxDuration = if (state.durationMs > 0) state.durationMs.toFloat() else 1f
+        val currentPosition = if (isSeeking) seekPositionMs else state.positionMs.toFloat().coerceIn(0f, maxDuration)
+
+        Slider(
+            value = currentPosition,
+            onValueChange = {
+                isSeeking = true
+                seekPositionMs = it
+            },
+            onValueChangeFinished = {
+                isSeeking = false
+                onSeekTo(seekPositionMs.toLong())
+            },
+            valueRange = 0f..maxDuration,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(20.dp),
+            colors = SliderDefaults.colors(
+                thumbColor = Color.White,
+                activeTrackColor = Color.White,
+                inactiveTrackColor = Color(0xFF2C2C2E)
             )
+        )
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = state.formattedPosition,
-                    color = Color(0xFF8E8E93),
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-                Text(
-                    text = state.formattedDuration,
-                    color = Color(0xFF8E8E93),
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = if (isSeeking) state.formatTime(seekPositionMs.toLong()) else state.formattedPosition,
+                color = Color(0xFF8E8E93),
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace
+            )
+            Text(
+                text = state.formattedDuration,
+                color = Color(0xFF8E8E93),
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace
+            )
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Transport Controls Row
+        // Bottom Row: Previous, Play/Pause (larger, filled circle), Next
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -341,20 +360,20 @@ fun ExpandedMusicView(
             // Previous
             IconButton(
                 onClick = onPreviousClick,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.SkipPrevious,
                     contentDescription = "Previous Track",
                     tint = Color.White,
-                    modifier = Modifier.size(26.dp)
+                    modifier = Modifier.size(32.dp)
                 )
             }
 
-            // Play/Pause
+            // Play/Pause (larger, in a filled circle)
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(52.dp)
                     .clip(CircleShape)
                     .background(Color.White)
                     .clickable { onPlayPauseClick() },
@@ -364,22 +383,35 @@ fun ExpandedMusicView(
                     imageVector = if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = if (state.isPlaying) "Pause" else "Play",
                     tint = Color.Black,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(30.dp)
                 )
             }
 
             // Next
             IconButton(
                 onClick = onNextClick,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.SkipNext,
                     contentDescription = "Next Track",
                     tint = Color.White,
-                    modifier = Modifier.size(26.dp)
+                    modifier = Modifier.size(32.dp)
                 )
             }
         }
     }
+}
+
+fun drawableToBitmap(drawable: Drawable): Bitmap {
+    if (drawable is BitmapDrawable && drawable.bitmap != null) {
+        return drawable.bitmap
+    }
+    val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 48
+    val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 48
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    drawable.setBounds(0, 0, canvas.width, canvas.height)
+    drawable.draw(canvas)
+    return bitmap
 }

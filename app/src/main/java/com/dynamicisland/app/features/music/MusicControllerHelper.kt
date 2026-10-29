@@ -139,6 +139,14 @@ class MusicControllerHelper(private val context: Context) {
         }
     }
 
+    fun seekTo(positionMs: Long) {
+        try {
+            activeController?.transportControls?.seekTo(positionMs)
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to seekTo: ${e.message}")
+        }
+    }
+
     private fun findAndAttachActiveSession() {
         val manager = mediaSessionManager ?: return
         val component = ComponentName(context, IslandNotificationListenerService::class.java)
@@ -255,7 +263,7 @@ class MusicControllerHelper(private val context: Context) {
         playbackTickerJob?.cancel()
         playbackTickerJob = helperScope.launch {
             while (isActive) {
-                delay(1000) // 1 second update interval as requested
+                delay(500) // 500ms update interval while playing
                 val pbState = controller.playbackState ?: break
                 if (pbState.state != PlaybackState.STATE_PLAYING) break
 

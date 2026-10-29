@@ -3,13 +3,16 @@ package com.dynamicisland.app.overlay
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -51,8 +54,7 @@ import com.dynamicisland.app.features.battery.ExpandedBatteryView
 import com.dynamicisland.app.features.music.CollapsedMusicView
 import com.dynamicisland.app.features.music.ExpandedMusicView
 import com.dynamicisland.app.features.music.MusicState
-import com.dynamicisland.app.features.notifications.CollapsedNotificationView
-import com.dynamicisland.app.features.notifications.ExpandedNotificationView
+import com.dynamicisland.app.features.notifications.CompactNotificationBannerView
 import com.dynamicisland.app.features.notifications.IslandNotification
 import com.dynamicisland.app.features.timer.CollapsedTimerView
 import com.dynamicisland.app.features.timer.ExpandedTimerView
@@ -65,8 +67,10 @@ import kotlin.math.roundToInt
  * Handles:
  * - Spring animation between collapsed pill and expanded card
  * - Tap to expand / collapse
- * - Window-bounded touch geometry (no full-screen scrim; status bar and outside apps remain tappable)
- * - Vertical drag with bouncy spring snap-back
+ * - Swipe UP to dismiss (animates out and stays hidden until next event)
+ * - Swipe DOWN on collapsed pill to expand
+ * - Window-bounded touch geometry (status bar and outside apps remain tappable)
+ * - Auto-hide countdown touch restart
  */
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -83,6 +87,9 @@ fun IslandView(
     isTimerEnabled: Boolean,
     onExpandRequest: () -> Unit,
     onCollapseRequest: () -> Unit,
+    onDismissRequest: () -> Unit = {},
+    onTouchInteraction: () -> Unit = {},
+    onSeekTo: (Long) -> Unit = {},
     onPlayPauseClick: () -> Unit,
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
@@ -91,14 +98,14 @@ fun IslandView(
     val coroutineScope = rememberCoroutineScope()
     val dragOffsetY = remember { Animatable(0f) }
 
-    // Spring animation spec: smooth and slightly bouncy as requested
+    // Spring animation spec: smooth and slightly bouncy
     val springSpec = spring<androidx.compose.ui.unit.Dp>(
         dampingRatio = Spring.DampingRatioMediumBouncy,
         stiffness = Spring.StiffnessLow
     )
 
     // Determine the active mode based on priorities:
-    // First-Time Intro > Notification (brief) > Battery (brief alert) > Timer (while running) > Music (while playing/grace) > Idle
+    // First-Time Intro > Notification (compact pill) > Battery (brief alert) > Timer (while running) > Music (while playing/grace) > Idle
     val effectiveMode = when {
         uiState.activeMode == ActiveMode.FIRST_TIME_INTRO -> ActiveMode.FIRST_TIME_INTRO
         isNotificationEnabled && notificationState.isNotEmpty -> ActiveMode.NOTIFICATION
@@ -118,8 +125,8 @@ fun IslandView(
         when (effectiveMode) {
             ActiveMode.FIRST_TIME_INTRO -> 350.dp
             ActiveMode.BATTERY -> (basePillWidthDp + 6).dp
-            ActiveMode.MUSIC -> (basePillWidthDp + 24).dp
-            ActiveMode.NOTIFICATION -> (basePillWidthDp + 54).dp
+            ActiveMode.MUSIC -> 150.dp // Item 6: Pill width about 150dp
+            ActiveMode.NOTIFICATION -> 340.dp // Item 2: Compact pill max width 340dp
             ActiveMode.TIMER -> (basePillWidthDp + 16).dp
             ActiveMode.IDLE -> basePillWidthDp.dp
         }
@@ -128,17 +135,21 @@ fun IslandView(
     val targetHeight = if (isExpanded) {
         when (effectiveMode) {
             ActiveMode.BATTERY -> 146.dp
-            ActiveMode.MUSIC -> 180.dp
-            ActiveMode.NOTIFICATION -> 136.dp
+            ActiveMode.MUSIC -> 188.dp // Item 7: Modern layout with album art, slider, controls
+            ActiveMode.NOTIFICATION -> 60.dp // Item 2: Compact pill
             ActiveMode.TIMER -> 150.dp
             ActiveMode.IDLE -> 110.dp
             ActiveMode.FIRST_TIME_INTRO -> 44.dp
         }
     } else {
-        if (effectiveMode == ActiveMode.FIRST_TIME_INTRO) 44.dp else 36.dp
+        when (effectiveMode) {
+            ActiveMode.FIRST_TIME_INTRO -> 44.dp
+            ActiveMode.NOTIFICATION -> 60.dp // Item 2: Compact pill
+            else -> 36.dp // Item 6: Keep height at 36dp
+        }
     }
 
-    val targetCornerRadius = if (isExpanded) 28.dp else 18.dp
+    val targetCornerRadius = if (isExpanded || effectiveMode == ActiveMode.NOTIFICATION) 28.dp else 18.dp
 
     // Animate dimensions using bouncy spring physics
     val animatedWidth by animateDpAsState(
@@ -159,7 +170,7 @@ fun IslandView(
 
     val interactionSource = remember { MutableInteractionSource() }
 
-    // Sized strictly to the card/pill with bottom headroom for drag snap-back.
+    // Sized strictly to the card/pill.
     // No full-screen scrim: outside touches pass cleanly to underlying apps and status bar icons.
     Box(
         modifier = modifier.wrapContentSize(Alignment.TopCenter),
@@ -168,7 +179,6 @@ fun IslandView(
         // The Island Pill / Card
         Box(
             modifier = Modifier
-                .padding(bottom = if (isExpanded) 0.dp else 24.dp)
                 .offset { IntOffset(0, dragOffsetY.value.roundToInt()) }
                 .width(animatedWidth)
                 .height(animatedHeight)
@@ -178,11 +188,32 @@ fun IslandView(
                 )
                 .clip(RoundedCornerShape(animatedCornerRadius))
                 .background(Color.Black) // Pitch black OLED pill
-                // Drag gesture with spring snap-back (active when collapsed)
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.08f), // Item 2: subtle 1dp border (white at 8% opacity)
+                    shape = RoundedCornerShape(animatedCornerRadius)
+                )
+                // Gesture handling: Swipe UP to dismiss, Swipe DOWN on collapsed pill to expand
                 .pointerInput(isExpanded) {
-                    if (!isExpanded) {
-                        detectVerticalDragGestures(
-                            onDragEnd = {
+                    detectVerticalDragGestures(
+                        onDragStart = { _ ->
+                            onTouchInteraction()
+                        },
+                        onDragEnd = {
+                            onTouchInteraction()
+                            val currentOffset = dragOffsetY.value
+                            if (currentOffset < -25f) {
+                                // Item 5: Swipe UP to dismiss
+                                coroutineScope.launch {
+                                    dragOffsetY.animateTo(
+                                        targetValue = -100f,
+                                        animationSpec = tween(durationMillis = 180, easing = FastOutLinearInEasing)
+                                    )
+                                    onDismissRequest()
+                                    dragOffsetY.snapTo(0f)
+                                }
+                            } else if (!isExpanded && currentOffset > 20f) {
+                                // Item 5: Swipe DOWN on collapsed pill to expand
                                 coroutineScope.launch {
                                     dragOffsetY.animateTo(
                                         targetValue = 0f,
@@ -191,9 +222,10 @@ fun IslandView(
                                             stiffness = Spring.StiffnessLow
                                         )
                                     )
+                                    onExpandRequest()
                                 }
-                            },
-                            onDragCancel = {
+                            } else {
+                                // Spring snap-back
                                 coroutineScope.launch {
                                     dragOffsetY.animateTo(
                                         targetValue = 0f,
@@ -202,25 +234,37 @@ fun IslandView(
                                             stiffness = Spring.StiffnessLow
                                         )
                                     )
-                                }
-                            },
-                            onVerticalDrag = { change, dragAmount ->
-                                change.consume()
-                                // Apply resistance to drag: clamp between -20 and +40 px
-                                val current = dragOffsetY.value
-                                val damped = dragAmount * 0.45f
-                                val newOffset = (current + damped).coerceIn(-20f, 40f)
-                                coroutineScope.launch {
-                                    dragOffsetY.snapTo(newOffset)
                                 }
                             }
-                        )
-                    }
+                        },
+                        onDragCancel = {
+                            coroutineScope.launch {
+                                dragOffsetY.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessLow
+                                    )
+                                )
+                            }
+                        },
+                        onVerticalDrag = { change, dragAmount ->
+                            change.consume()
+                            onTouchInteraction()
+                            val current = dragOffsetY.value
+                            val damped = dragAmount * 0.45f
+                            val newOffset = (current + damped).coerceIn(-100f, 50f)
+                            coroutineScope.launch {
+                                dragOffsetY.snapTo(newOffset)
+                            }
+                        }
+                    )
                 }
                 .clickable(
                     interactionSource = interactionSource,
                     indication = null
                 ) {
+                    onTouchInteraction()
                     if (isExpanded) {
                         onCollapseRequest()
                     } else {
@@ -248,11 +292,12 @@ fun IslandView(
                                 state = musicState,
                                 onPlayPauseClick = onPlayPauseClick,
                                 onPreviousClick = onPreviousClick,
-                                onNextClick = onNextClick
+                                onNextClick = onNextClick,
+                                onSeekTo = onSeekTo
                             )
                         }
                         ActiveMode.NOTIFICATION -> {
-                            ExpandedNotificationView(notification = notificationState)
+                            CompactNotificationBannerView(notification = notificationState)
                         }
                         ActiveMode.TIMER -> {
                             ExpandedTimerView(state = timerState)
@@ -281,7 +326,6 @@ fun IslandView(
                             }
                         }
                         ActiveMode.IDLE -> {
-                            // Minimal idle placeholder
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -322,7 +366,7 @@ fun IslandView(
                             CollapsedMusicView(state = musicState)
                         }
                         ActiveMode.NOTIFICATION -> {
-                            CollapsedNotificationView(notification = notificationState)
+                            CompactNotificationBannerView(notification = notificationState)
                         }
                         ActiveMode.TIMER -> {
                             CollapsedTimerView(state = timerState)
@@ -348,7 +392,6 @@ fun IslandView(
                             }
                         }
                         ActiveMode.IDLE -> {
-                            // Phase 1: Minimal pill shell
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically

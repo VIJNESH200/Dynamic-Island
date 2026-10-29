@@ -31,7 +31,7 @@ import kotlin.math.roundToInt
  * Manages the WindowManager overlay for Dynamic Island.
  *
  * Touch Architecture:
- * - Window size strictly matches the pill (~126dp) or expanded card (340dp).
+ * - Window size strictly matches the pill (~126-150dp) or expanded card (340dp).
  * - Window Y position starts cleanly below the real status bar height (with 4dp gap).
  * - Status bar icons (clock, battery, Wi-Fi, notifications) remain completely uncovered
  *   and tappable in BOTH collapsed and expanded states.
@@ -40,7 +40,9 @@ import kotlin.math.roundToInt
  *
  * Lifecycle:
  * - On-demand: removed from the screen when idle; shown only during active triggers
- *   (charger plug/unplug for 4s, music playing + 6s grace, notification arrival, timer running).
+ *   (charger plug/unplug, music playing + 6s grace, notification arrival, timer running).
+ * - Auto-hide: Disappears after timeout (default 5s) unless touched.
+ * - Swipe to dismiss: Swipe UP dismisses and keeps hidden until next event.
  */
 class DynamicIslandOverlay(
     private val context: Context,
@@ -70,9 +72,12 @@ class DynamicIslandOverlay(
     private val _isMusicTriggerActive = MutableStateFlow(false)
     private val _isFirstTimeIntroActive = MutableStateFlow(false)
     private val _isManualPreviewActive = MutableStateFlow(false)
+    private val _isDismissed = MutableStateFlow(false)
+    val isDismissed: StateFlow<Boolean> = _isDismissed.asStateFlow()
 
     private var notificationDismissJob: Job? = null
     private var powerAlertJob: Job? = null
+    private var autoHideJob: Job? = null
 
     companion object {
         // Small 4dp gap below the status bar so the pill never overlaps clock, icons or camera hole
@@ -91,6 +96,46 @@ class DynamicIslandOverlay(
                 }
             }
         }
+
+        // Observe auto-hide setting changes
+        overlayScope.launch {
+            preferences.autoHideSeconds.collect {
+                resetAutoHideTimer()
+            }
+        }
+    }
+
+    /**
+     * Resets the auto-hide timer countdown.
+     * Any touch on the island or state change restarts the countdown from zero.
+     */
+    fun resetAutoHideTimer() {
+        autoHideJob?.cancel()
+        val timeoutSeconds = preferences.autoHideSeconds.value
+        if (timeoutSeconds <= 0) {
+            return // Never auto-hide
+        }
+
+        autoHideJob = overlayScope.launch {
+            delay(timeoutSeconds * 1000L)
+            if (isOverlayAttached) {
+                if (_uiState.value.isExpanded) {
+                    collapse()
+                } else if (!_isMusicTriggerActive.value && !_timerState.value.isActive) {
+                    hide()
+                }
+            }
+        }
+    }
+
+    /**
+     * Swiped UP to dismiss:
+     * Hides the island immediately and keeps it hidden until the next trigger event.
+     */
+    fun dismiss() {
+        _isDismissed.value = true
+        autoHideJob?.cancel()
+        hide()
     }
 
     /**
@@ -185,11 +230,36 @@ class DynamicIslandOverlay(
                         isMusicEnabled = isMusicEnabled,
                         isNotificationEnabled = isNotificationEnabled,
                         isTimerEnabled = isTimerEnabled,
-                        onExpandRequest = { expand() },
-                        onCollapseRequest = { collapse() },
-                        onPlayPauseClick = { musicHelper.togglePlayPause() },
-                        onPreviousClick = { musicHelper.skipToPrevious() },
-                        onNextClick = { musicHelper.skipToNext() }
+                        onExpandRequest = {
+                            resetAutoHideTimer()
+                            expand()
+                        },
+                        onCollapseRequest = {
+                            resetAutoHideTimer()
+                            collapse()
+                        },
+                        onDismissRequest = {
+                            dismiss()
+                        },
+                        onTouchInteraction = {
+                            resetAutoHideTimer()
+                        },
+                        onSeekTo = { posMs ->
+                            resetAutoHideTimer()
+                            musicHelper.seekTo(posMs)
+                        },
+                        onPlayPauseClick = {
+                            resetAutoHideTimer()
+                            musicHelper.togglePlayPause()
+                        },
+                        onPreviousClick = {
+                            resetAutoHideTimer()
+                            musicHelper.skipToPrevious()
+                        },
+                        onNextClick = {
+                            resetAutoHideTimer()
+                            musicHelper.skipToNext()
+                        }
                     )
                 }
             }
@@ -212,6 +282,7 @@ class DynamicIslandOverlay(
                 owner.onResume()
             }
 
+            resetAutoHideTimer()
             Log.d(tag, "Dynamic Island overlay attached successfully")
         } catch (e: Exception) {
             Log.e(tag, "Failed to add Dynamic Island overlay: ${e.message}", e)
@@ -253,10 +324,10 @@ class DynamicIslandOverlay(
     }
 
     /**
-     * Hides and completely removes the overlay window from the screen.
-     * Ensures zero touch interference and zero pixel coverage when no trigger is active.
+     * Hides and removes the overlay window from the WindowManager.
      */
     fun hide() {
+        autoHideJob?.cancel()
         if (!isOverlayAttached) return
 
         try {
@@ -283,6 +354,7 @@ class DynamicIslandOverlay(
         if (!isOverlayAttached) return
         _uiState.value = _uiState.value.copy(expansionState = ExpansionState.EXPANDED)
         updateWindowLayoutParams(isExpanded = true)
+        resetAutoHideTimer()
     }
 
     /**
@@ -298,14 +370,20 @@ class DynamicIslandOverlay(
                 updateWindowLayoutParams(isExpanded = false)
             }
         }
+        resetAutoHideTimer()
     }
 
     /**
      * Updates overlay visibility based on whether any trigger is currently active.
-     * When nothing is active, the overlay is removed from the screen.
+     * When nothing is active or when dismissed, the overlay is removed from the screen.
      */
     fun updateOverlayVisibility() {
         if (!android.provider.Settings.canDrawOverlays(context) || !preferences.isIslandEnabled.value) {
+            hide()
+            return
+        }
+
+        if (_isDismissed.value) {
             hide()
             return
         }
@@ -320,7 +398,6 @@ class DynamicIslandOverlay(
         val shouldBeVisible = batteryActive || musicActive || notifActive || timerActive || introActive || previewActive
 
         if (shouldBeVisible) {
-            // Determine active mode
             val nextMode = when {
                 introActive -> ActiveMode.FIRST_TIME_INTRO
                 notifActive -> ActiveMode.NOTIFICATION
@@ -337,6 +414,7 @@ class DynamicIslandOverlay(
             if (!isOverlayAttached) {
                 show()
             }
+            resetAutoHideTimer()
         } else {
             if (isOverlayAttached) {
                 hide()
@@ -349,6 +427,7 @@ class DynamicIslandOverlay(
      * Shows the collapsed pill for 4 seconds, then hides if no other trigger is active.
      */
     fun triggerChargerAlert() {
+        _isDismissed.value = false
         powerAlertJob?.cancel()
         _isChargerTriggerActive.value = true
         _uiState.value = _uiState.value.copy(
@@ -356,6 +435,7 @@ class DynamicIslandOverlay(
             expansionState = ExpansionState.COLLAPSED
         )
         updateOverlayVisibility()
+        resetAutoHideTimer()
 
         powerAlertJob = overlayScope.launch {
             delay(4000)
@@ -370,6 +450,10 @@ class DynamicIslandOverlay(
      * Does NOT auto-expand: always keeps collapsed pill until tapped.
      */
     fun setMusicActive(isActive: Boolean) {
+        if (isActive && !_isMusicTriggerActive.value) {
+            // New playback session or unpaused -> restore from dismissed
+            _isDismissed.value = false
+        }
         _isMusicTriggerActive.value = isActive
         if (isActive) {
             if (_uiState.value.activeMode != ActiveMode.NOTIFICATION &&
@@ -386,9 +470,10 @@ class DynamicIslandOverlay(
     }
 
     /**
-     * Displays an incoming notification alert on the island briefly (~4.5s) then hides.
+     * Displays an incoming notification alert on the island briefly (~5s) then hides.
      */
     fun postNotificationAlert(notification: IslandNotification) {
+        _isDismissed.value = false
         notificationDismissJob?.cancel()
         _notificationState.value = notification
         _uiState.value = _uiState.value.copy(
@@ -396,9 +481,10 @@ class DynamicIslandOverlay(
             expansionState = ExpansionState.COLLAPSED
         )
         updateOverlayVisibility()
+        resetAutoHideTimer()
 
         notificationDismissJob = overlayScope.launch {
-            delay(4500)
+            delay(5000)
             _notificationState.value = IslandNotification()
             updateOverlayVisibility()
         }
@@ -408,6 +494,9 @@ class DynamicIslandOverlay(
      * Updates timer countdown state. Stays visible while the timer runs.
      */
     fun updateTimer(timer: TimerState) {
+        if (timer.isActive && !_timerState.value.isActive) {
+            _isDismissed.value = false
+        }
         _timerState.value = timer
         if (timer.isActive) {
             if (_uiState.value.activeMode != ActiveMode.NOTIFICATION &&
@@ -427,8 +516,10 @@ class DynamicIslandOverlay(
      * Manual preview triggered from UI screen for testing.
      */
     fun triggerManualPreview() {
+        _isDismissed.value = false
         _isManualPreviewActive.value = true
         updateOverlayVisibility()
+        resetAutoHideTimer()
         overlayScope.launch {
             delay(5000)
             _isManualPreviewActive.value = false

@@ -1,6 +1,9 @@
 package com.dynamicisland.app.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,10 +12,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BatteryChargingFull
@@ -41,6 +46,7 @@ import com.dynamicisland.app.data.IslandPreferences
 import com.dynamicisland.app.ui.components.NothingCard
 import com.dynamicisland.app.ui.components.NothingSwitch
 import com.dynamicisland.app.ui.theme.BatteryGreen
+import com.dynamicisland.app.ui.theme.DarkSurface
 import com.dynamicisland.app.ui.theme.NothingDarkGray
 import com.dynamicisland.app.ui.theme.NothingGrayText
 import com.dynamicisland.app.ui.theme.NothingRed
@@ -59,6 +65,7 @@ fun SettingsScreen(
     val isMusicEnabled by preferences.isMusicFeatureEnabled.collectAsState()
     val isNotificationEnabled by preferences.isNotificationFeatureEnabled.collectAsState()
     val isTimerEnabled by preferences.isTimerFeatureEnabled.collectAsState()
+    val autoHideSeconds by preferences.autoHideSeconds.collectAsState()
     val verticalOffset by preferences.verticalOffsetDp.collectAsState()
     val pillWidth by preferences.pillWidthDp.collectAsState()
 
@@ -68,6 +75,7 @@ fun SettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -293,6 +301,66 @@ fun SettingsScreen(
                         checked = isTimerEnabled,
                         onCheckedChange = { preferences.setTimerFeatureEnabled(it) }
                     )
+                }
+            }
+
+            // Auto-Hide Timeout Section
+            Text(
+                text = "AUTO-HIDE TIMEOUT",
+                color = NothingGrayText,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 1.sp
+            )
+
+            NothingCard {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Idle Disappear Delay",
+                        color = NothingWhite,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Automatically hide the island after inactivity. Any touch on the island restarts the timer.",
+                        color = NothingGrayText,
+                        fontSize = 12.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val options = listOf(
+                            3 to "3s",
+                            5 to "5s",
+                            10 to "10s",
+                            -1 to "Never"
+                        )
+                        options.forEach { (seconds, label) ->
+                            val isSelected = autoHideSeconds == seconds
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSelected) NothingRed else DarkSurface)
+                                    .clickable { preferences.setAutoHideSeconds(seconds) }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = if (isSelected) NothingWhite else Color(0xFFCCCCCC),
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
                 }
             }
 

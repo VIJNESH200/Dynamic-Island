@@ -6,25 +6,28 @@ An elegant, animated floating pill-shaped overlay for Android, built with **Kotl
 
 ## 🌟 Key Features
 
-1. **Floating Pill Overlay (Shell & Physics)**
+1. **Floating Pill Overlay (Shell, Gestures & Physics)**
    - Minimalist pitch-black pill centered at the top of the display beneath the status bar.
    - Smooth, bouncy spring-based transitions (`Spring.DampingRatioMediumBouncy`, `Spring.StiffnessLow`).
-   - Interactive vertical drag gesture with elastic resistance and spring snap-back.
-   - Tap pill to expand into a rich ~340dp card; tap outside or tap the pill to smoothly collapse.
-   - **Zero Touch Blocking**: Window bounds are tightly sized to the pill / card (`WRAP_CONTENT` x `WRAP_CONTENT`). Uses `FLAG_WATCH_OUTSIDE_TOUCH` so taps outside the card pass directly to underlying apps and status bar icons.
+   - **Intuitive Swipe Gestures**:
+     - **Swipe UP**: Dismiss the island immediately; stays dismissed until the next active trigger (charger, music track change, incoming notification, or timer).
+     - **Swipe DOWN**: On the collapsed pill, expands it smoothly into the full card.
+     - **Tap**: Expands collapsed pill, or collapses expanded card.
+   - **Auto-Hide Inactivity Timer**: Island automatically hides after 5 seconds by default (configurable to 3s, 5s, 10s, or Never in Settings). Any touch, drag, or interaction restarts the countdown from zero.
+   - **Zero Touch Blocking**: Window bounds are tightly sized to the pill / card (`WRAP_CONTENT` x `WRAP_CONTENT`). Uses `FLAG_WATCH_OUTSIDE_TOUCH`, `FLAG_NOT_TOUCH_MODAL`, and `FLAG_NOT_FOCUSABLE` so taps outside the card pass directly to underlying apps and status bar icons.
 
 2. **On-Demand Event Triggers (No Always-On Pill)**
    - The pill is hidden by default and removed from the screen when idle to avoid visual clutter.
    - Appears dynamically only when active triggers occur:
      - **Charger Plug / Unplug**: Displays battery percentage and charging state for 4 seconds, then auto-hides.
      - **Music Playback**: Appears in collapsed state when media plays; auto-hides 6 seconds after pausing. Does not auto-expand.
-     - **Incoming Notifications**: Displays brief 4.5-second alert banner, then auto-hides.
+     - **Incoming Notifications**: Displays a compact 340dp pill banner with real app icon, app name, title, and body for 5 seconds, then auto-hides.
      - **Active Timer & Stopwatch**: Stays visible while a countdown timer or stopwatch runs.
    - Each trigger can be independently toggled in Settings.
 
 3. **Music in Collapsed Pill & Expanded Card**
-   - **Collapsed Pill**: Displays the actual source app icon (e.g. Spotify, YouTube Music) via `PackageManager.getApplicationIcon()`, accompanied by a progress bar updating every 1 second (or an animated 3-bar equalizer if track duration is unknown).
-   - **Expanded Card**: Displays album artwork, track title, artist name, elapsed / total duration progress bar, and full playback controls (Previous, Play/Pause, Next) via `MediaController.transportControls`.
+   - **Collapsed Pill (150dp x 36dp)**: Displays the actual source app icon (e.g. Spotify, YouTube Music) on the left via `PackageManager.getApplicationIcon()`. On the right, displays a circular progress ring around a play/pause symbol showing elapsed playback time (or a 3-bar animated equalizer if duration is unknown).
+   - **Expanded Card (340dp, 28dp radius)**: Displays 56dp album artwork (rounded 12dp), track title (bold), artist name (gray), a seekable thin progress slider updated every 500ms with elapsed/total timestamps, and Previous, Play/Pause (in a filled circle), and Next controls via `MediaController.transportControls`. Tested for seamless background playback with Spotify.
 
 4. **Status Bar Clearance & Alignment Calibration**
    - Sits cleanly below the status bar with automatic runtime status bar height detection and a 4dp gap, plus an in-app fine-tuning slider (0–40dp).

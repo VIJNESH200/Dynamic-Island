@@ -42,6 +42,10 @@ class IslandPreferences(context: Context) {
     private val _pillWidthDp = MutableStateFlow(prefs.getInt(KEY_PILL_WIDTH, DEFAULT_PILL_WIDTH_DP))
     val pillWidthDp: StateFlow<Int> = _pillWidthDp.asStateFlow()
 
+    // Auto-hide timeout in seconds (3, 5, 10, or -1 for Never)
+    private val _autoHideSeconds = MutableStateFlow(prefs.getInt(KEY_AUTO_HIDE_SECONDS, DEFAULT_AUTO_HIDE_SECONDS))
+    val autoHideSeconds: StateFlow<Int> = _autoHideSeconds.asStateFlow()
+
     fun setIslandEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_ISLAND_ENABLED, enabled).apply()
         _isIslandEnabled.value = enabled
@@ -82,6 +86,11 @@ class IslandPreferences(context: Context) {
         _pillWidthDp.value = width
     }
 
+    fun setAutoHideSeconds(seconds: Int) {
+        prefs.edit().putInt(KEY_AUTO_HIDE_SECONDS, seconds).apply()
+        _autoHideSeconds.value = seconds
+    }
+
     companion object {
         private const val PREFS_NAME = "dynamic_island_prefs"
         private const val KEY_ISLAND_ENABLED = "island_enabled"
@@ -92,10 +101,12 @@ class IslandPreferences(context: Context) {
         private const val KEY_FIRST_TIME_INTRO = "has_shown_first_time_intro"
         private const val KEY_VERTICAL_OFFSET = "vertical_offset_dp"
         private const val KEY_PILL_WIDTH = "pill_width_dp"
+        private const val KEY_AUTO_HIDE_SECONDS = "auto_hide_seconds"
 
         // Default extra offset: 0dp (pill sits cleanly 4dp below the system status bar)
         const val DEFAULT_OFFSET_DP = 0
         const val DEFAULT_PILL_WIDTH_DP = 126
+        const val DEFAULT_AUTO_HIDE_SECONDS = 5
 
         @Volatile
         private var instance: IslandPreferences? = null
