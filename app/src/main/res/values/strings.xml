@@ -1,8 +1,8 @@
 <resources>
     <string name="app_name">Dynamic Island</string>
     <string name="notification_service_label">Dynamic Island Media &amp; Notifications</string>
-    <string name="service_notification_title">Dynamic Island Active</string>
-    <string name="service_notification_text">Dynamic Island is running in the foreground</string>
+    <string name="service_notification_title">Dynamic Island</string>
+    <string name="service_notification_text">Dynamic Island is active</string>
     <string name="channel_name">Dynamic Island Overlay</string>
     <string name="channel_description">Persistent foreground notification keeping Dynamic Island running</string>
     

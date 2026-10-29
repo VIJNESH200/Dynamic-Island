@@ -255,7 +255,7 @@ class MusicControllerHelper(private val context: Context) {
         playbackTickerJob?.cancel()
         playbackTickerJob = helperScope.launch {
             while (isActive) {
-                delay(500)
+                delay(1000) // 1 second update interval as requested
                 val pbState = controller.playbackState ?: break
                 if (pbState.state != PlaybackState.STATE_PLAYING) break
 

@@ -19,6 +19,7 @@ import com.dynamicisland.app.data.IslandPreferences
 import com.dynamicisland.app.features.battery.BatteryManagerHelper
 import com.dynamicisland.app.features.music.MusicControllerHelper
 import com.dynamicisland.app.features.notifications.IslandNotification
+import com.dynamicisland.app.features.timer.TimerState
 import com.dynamicisland.app.overlay.DynamicIslandOverlay
 import com.dynamicisland.app.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +29,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -60,10 +62,22 @@ class DynamicIslandService : Service() {
         batteryHelper.startMonitoring()
         musicHelper.start()
 
-        // Listen for power connected to briefly expand charging card with auto-collapse
-        batteryHelper.onPowerConnectedListener = {
+        // Listen for power connected/disconnected to show charging pill for 4s
+        batteryHelper.onPowerStateChangedListener = { _ ->
             if (preferences.isBatteryFeatureEnabled.value) {
-                overlay?.showPowerConnectedAlert()
+                overlay?.triggerChargerAlert()
+            }
+        }
+
+        // Listen for music playback state changes
+        serviceScope.launch {
+            combine(
+                musicHelper.musicState,
+                preferences.isMusicFeatureEnabled
+            ) { musicState, isEnabled ->
+                isEnabled && musicState.isDisplayActive
+            }.collect { shouldShowMusic ->
+                overlay?.setMusicActive(shouldShowMusic)
             }
         }
 
@@ -95,9 +109,17 @@ class DynamicIslandService : Service() {
         if (!isPreferencesCollectorStarted) {
             isPreferencesCollectorStarted = true
             serviceScope.launch {
-                preferences.isIslandEnabled.collect { isEnabled ->
+                combine(
+                    preferences.isIslandEnabled,
+                    preferences.isBatteryFeatureEnabled,
+                    preferences.isMusicFeatureEnabled,
+                    preferences.isNotificationFeatureEnabled,
+                    preferences.isTimerFeatureEnabled
+                ) { isIsland, _, _, _, _ ->
+                    isIsland
+                }.collect { isEnabled ->
                     if (isEnabled) {
-                        overlay?.show()
+                        overlay?.updateOverlayVisibility()
                     } else {
                         overlay?.hide()
                     }
@@ -163,7 +185,7 @@ class DynamicIslandService : Service() {
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .build()
@@ -185,7 +207,7 @@ class DynamicIslandService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 getString(R.string.channel_name),
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_MIN
             ).apply {
                 description = getString(R.string.channel_description)
                 setShowBadge(false)
@@ -222,6 +244,18 @@ class DynamicIslandService : Service() {
 
         fun postNotification(notification: IslandNotification) {
             activeOverlayInstance?.postNotificationAlert(notification)
+        }
+
+        fun updateTimer(timer: TimerState) {
+            activeOverlayInstance?.updateTimer(timer)
+        }
+
+        fun triggerChargerAlert() {
+            activeOverlayInstance?.triggerChargerAlert()
+        }
+
+        fun triggerManualPreview() {
+            activeOverlayInstance?.triggerManualPreview()
         }
     }
 }

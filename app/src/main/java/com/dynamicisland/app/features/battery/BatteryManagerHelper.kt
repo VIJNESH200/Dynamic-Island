@@ -21,8 +21,9 @@ class BatteryManagerHelper(private val context: Context) {
     private val _batteryState = MutableStateFlow(BatteryState())
     val batteryState: StateFlow<BatteryState> = _batteryState.asStateFlow()
 
-    // Callback when power is connected (to trigger island attention)
+    // Callback when power is connected or disconnected (to trigger island attention for 4s)
     var onPowerConnectedListener: (() -> Unit)? = null
+    var onPowerStateChangedListener: ((isPlugged: Boolean) -> Unit)? = null
 
     private var isReceiverRegistered = false
 
@@ -35,6 +36,7 @@ class BatteryManagerHelper(private val context: Context) {
                 }
                 Intent.ACTION_POWER_CONNECTED -> {
                     onPowerConnectedListener?.invoke()
+                    onPowerStateChangedListener?.invoke(true)
                 }
                 Intent.ACTION_POWER_DISCONNECTED -> {
                     // Update state to reflect disconnection
@@ -44,6 +46,7 @@ class BatteryManagerHelper(private val context: Context) {
                         powerSource = PowerSource.NONE,
                         chargeTimeRemainingMillis = -1L
                     )
+                    onPowerStateChangedListener?.invoke(false)
                 }
             }
         }

@@ -1,5 +1,11 @@
 package com.dynamicisland.app.features.music
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.remember
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -114,20 +120,62 @@ fun AudioEqualizerBars(
 }
 
 /**
+ * Converts an Android Drawable (including AdaptiveIconDrawable) into a Bitmap.
+ */
+fun drawableToBitmap(drawable: Drawable): Bitmap {
+    if (drawable is BitmapDrawable && drawable.bitmap != null) {
+        return drawable.bitmap
+    }
+    val width = drawable.intrinsicWidth.takeIf { it > 0 } ?: 48
+    val height = drawable.intrinsicHeight.takeIf { it > 0 } ?: 48
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    drawable.setBounds(0, 0, canvas.width, canvas.height)
+    drawable.draw(canvas)
+    return bitmap
+}
+
+/**
  * Collapsed pill view for music status.
+ * Shows the source app's real icon (e.g. Spotify), accompanied by a small progress
+ * bar based on playback position and duration (or animated equalizer if duration is unknown).
  */
 @Composable
 fun CollapsedMusicView(
     state: MusicState,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val appIconBitmap = remember(state.packageName) {
+        val pkg = state.packageName
+        if (!pkg.isNullOrBlank()) {
+            try {
+                val drawable = context.packageManager.getApplicationIcon(pkg)
+                drawableToBitmap(drawable)
+            } catch (_: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+    }
+
     Row(
         modifier = modifier.padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
-        // Album art thumbnail or music note icon
-        if (state.albumArt != null) {
+        // Source app's real icon (e.g. Spotify), or album art, or fallback music note
+        if (appIconBitmap != null) {
+            Image(
+                bitmap = appIconBitmap.asImageBitmap(),
+                contentDescription = "App Icon",
+                modifier = Modifier
+                    .size(18.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
+        } else if (state.albumArt != null) {
             Image(
                 bitmap = state.albumArt.asImageBitmap(),
                 contentDescription = "Album Art",
@@ -145,26 +193,26 @@ fun CollapsedMusicView(
             )
         }
 
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(8.dp))
 
-        // Title snippet
-        Text(
-            text = if (state.title.isNotBlank()) state.title else "Music",
-            color = Color.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false)
-        )
-
-        Spacer(modifier = Modifier.width(6.dp))
-
-        // Sound waves
-        AudioEqualizerBars(
-            isPlaying = state.isPlaying,
-            modifier = Modifier.size(14.dp)
-        )
+        // Next to the icon: small progress bar if duration is known; animated equalizer if unknown
+        if (state.durationMs > 0L) {
+            val progress = (state.positionMs.toFloat() / state.durationMs.toFloat()).coerceIn(0f, 1f)
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier
+                    .width(64.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp)),
+                color = Color.White,
+                trackColor = Color(0xFF333333)
+            )
+        } else {
+            AudioEqualizerBars(
+                isPlaying = state.isPlaying,
+                modifier = Modifier.size(16.dp)
+            )
+        }
     }
 }
 

@@ -13,11 +13,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -25,18 +25,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +54,9 @@ import com.dynamicisland.app.features.music.MusicState
 import com.dynamicisland.app.features.notifications.CollapsedNotificationView
 import com.dynamicisland.app.features.notifications.ExpandedNotificationView
 import com.dynamicisland.app.features.notifications.IslandNotification
+import com.dynamicisland.app.features.timer.CollapsedTimerView
+import com.dynamicisland.app.features.timer.ExpandedTimerView
+import com.dynamicisland.app.features.timer.TimerState
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -64,7 +65,7 @@ import kotlin.math.roundToInt
  * Handles:
  * - Spring animation between collapsed pill and expanded card
  * - Tap to expand / collapse
- * - Tap outside to collapse
+ * - Window-bounded touch geometry (no full-screen scrim; status bar and outside apps remain tappable)
  * - Vertical drag with bouncy spring snap-back
  */
 @OptIn(ExperimentalAnimationApi::class)
@@ -74,11 +75,12 @@ fun IslandView(
     batteryState: BatteryState,
     musicState: MusicState,
     notificationState: IslandNotification,
-    verticalOffsetDp: Int,
+    timerState: TimerState,
     basePillWidthDp: Int,
     isBatteryEnabled: Boolean,
     isMusicEnabled: Boolean,
     isNotificationEnabled: Boolean,
+    isTimerEnabled: Boolean,
     onExpandRequest: () -> Unit,
     onCollapseRequest: () -> Unit,
     onPlayPauseClick: () -> Unit,
@@ -95,12 +97,14 @@ fun IslandView(
         stiffness = Spring.StiffnessLow
     )
 
-    // Determine the active mode based on priorities and user preferences:
-    // Priority: Notification (temporary alert) > Music (if playing or in grace period) > Battery (if charging or <20%) > Idle
+    // Determine the active mode based on priorities:
+    // First-Time Intro > Notification (brief) > Battery (brief alert) > Timer (while running) > Music (while playing/grace) > Idle
     val effectiveMode = when {
+        uiState.activeMode == ActiveMode.FIRST_TIME_INTRO -> ActiveMode.FIRST_TIME_INTRO
         isNotificationEnabled && notificationState.isNotEmpty -> ActiveMode.NOTIFICATION
+        isBatteryEnabled && uiState.activeMode == ActiveMode.BATTERY -> ActiveMode.BATTERY
+        isTimerEnabled && timerState.isActive -> ActiveMode.TIMER
         isMusicEnabled && (musicState.isPlaying || (musicState.hasTrack && musicState.isDisplayActive)) -> ActiveMode.MUSIC
-        isBatteryEnabled && (batteryState.isCharging || batteryState.percentage <= 20) -> ActiveMode.BATTERY
         uiState.activeMode != ActiveMode.IDLE -> uiState.activeMode
         else -> ActiveMode.IDLE
     }
@@ -112,9 +116,11 @@ fun IslandView(
         340.dp
     } else {
         when (effectiveMode) {
+            ActiveMode.FIRST_TIME_INTRO -> 350.dp
             ActiveMode.BATTERY -> (basePillWidthDp + 6).dp
-            ActiveMode.MUSIC -> (basePillWidthDp + 48).dp
+            ActiveMode.MUSIC -> (basePillWidthDp + 24).dp
             ActiveMode.NOTIFICATION -> (basePillWidthDp + 54).dp
+            ActiveMode.TIMER -> (basePillWidthDp + 16).dp
             ActiveMode.IDLE -> basePillWidthDp.dp
         }
     }
@@ -124,10 +130,12 @@ fun IslandView(
             ActiveMode.BATTERY -> 146.dp
             ActiveMode.MUSIC -> 180.dp
             ActiveMode.NOTIFICATION -> 136.dp
+            ActiveMode.TIMER -> 150.dp
             ActiveMode.IDLE -> 110.dp
+            ActiveMode.FIRST_TIME_INTRO -> 44.dp
         }
     } else {
-        36.dp
+        if (effectiveMode == ActiveMode.FIRST_TIME_INTRO) 44.dp else 36.dp
     }
 
     val targetCornerRadius = if (isExpanded) 28.dp else 18.dp
@@ -151,36 +159,16 @@ fun IslandView(
 
     val interactionSource = remember { MutableInteractionSource() }
 
-    // When collapsed, only wrap the pill (+ bottom headroom for downward drag).
-    // When expanded, fill max size to intercept outside clicks on the scrim.
-    val rootModifier = if (isExpanded) {
-        modifier.fillMaxSize()
-    } else {
-        modifier.wrapContentSize(Alignment.TopCenter)
-    }
-
+    // Sized strictly to the card/pill with bottom headroom for drag snap-back.
+    // No full-screen scrim: outside touches pass cleanly to underlying apps and status bar icons.
     Box(
-        modifier = rootModifier,
+        modifier = modifier.wrapContentSize(Alignment.TopCenter),
         contentAlignment = Alignment.TopCenter
     ) {
-        // Scrim outside detector (only handles clicks when expanded)
-        if (isExpanded) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        interactionSource = interactionSource,
-                        indication = null
-                    ) {
-                        onCollapseRequest()
-                    }
-            )
-        }
-
         // The Island Pill / Card
         Box(
             modifier = Modifier
-                .padding(top = verticalOffsetDp.dp, bottom = if (isExpanded) 0.dp else 24.dp)
+                .padding(bottom = if (isExpanded) 0.dp else 24.dp)
                 .offset { IntOffset(0, dragOffsetY.value.roundToInt()) }
                 .width(animatedWidth)
                 .height(animatedHeight)
@@ -218,10 +206,10 @@ fun IslandView(
                             },
                             onVerticalDrag = { change, dragAmount ->
                                 change.consume()
-                                // Apply resistance to drag: clamp between -25 and +50 px
+                                // Apply resistance to drag: clamp between -20 and +40 px
                                 val current = dragOffsetY.value
                                 val damped = dragAmount * 0.45f
-                                val newOffset = (current + damped).coerceIn(-25f, 50f)
+                                val newOffset = (current + damped).coerceIn(-20f, 40f)
                                 coroutineScope.launch {
                                     dragOffsetY.snapTo(newOffset)
                                 }
@@ -266,8 +254,34 @@ fun IslandView(
                         ActiveMode.NOTIFICATION -> {
                             ExpandedNotificationView(notification = notificationState)
                         }
+                        ActiveMode.TIMER -> {
+                            ExpandedTimerView(state = timerState)
+                        }
+                        ActiveMode.FIRST_TIME_INTRO -> {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFD71921))
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Dynamic Island Active",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                         ActiveMode.IDLE -> {
-                            // Phase 1: Shell placeholder
+                            // Minimal idle placeholder
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -309,6 +323,29 @@ fun IslandView(
                         }
                         ActiveMode.NOTIFICATION -> {
                             CollapsedNotificationView(notification = notificationState)
+                        }
+                        ActiveMode.TIMER -> {
+                            CollapsedTimerView(state = timerState)
+                        }
+                        ActiveMode.FIRST_TIME_INTRO -> {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFD71921))
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Dynamic Island",
+                                    color = Color(0xFFE5E5EA),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                         ActiveMode.IDLE -> {
                             // Phase 1: Minimal pill shell

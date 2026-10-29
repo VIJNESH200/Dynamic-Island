@@ -6,30 +6,34 @@ An elegant, animated floating pill-shaped overlay for Android, built with **Kotl
 
 ## 🌟 Key Features
 
-1. **Floating Pill Overlay (Phase 1: Shell & Physics)**
-   - Minimalist pitch-black pill (~126dp x 36dp) centered at the top of the display beneath the status bar.
+1. **Floating Pill Overlay (Shell & Physics)**
+   - Minimalist pitch-black pill centered at the top of the display beneath the status bar.
    - Smooth, bouncy spring-based transitions (`Spring.DampingRatioMediumBouncy`, `Spring.StiffnessLow`).
    - Interactive vertical drag gesture with elastic resistance and spring snap-back.
    - Tap pill to expand into a rich ~340dp card; tap outside or tap the pill to smoothly collapse.
+   - **Zero Touch Blocking**: Window bounds are tightly sized to the pill / card (`WRAP_CONTENT` x `WRAP_CONTENT`). Uses `FLAG_WATCH_OUTSIDE_TOUCH` so taps outside the card pass directly to underlying apps and status bar icons.
 
-2. **Real-time Battery Monitor (Phase 2)**
-   - Monitors battery percentage and charging state via `BatteryManager` and `ACTION_BATTERY_CHANGED`.
-   - Displays estimated time to full charge (via `computeChargeTimeRemaining()` on Android 9+).
-   - Identifies power source: AC Fast Charging, USB, Wireless.
-   - Automatic attention banner when charger is connected.
+2. **On-Demand Event Triggers (No Always-On Pill)**
+   - The pill is hidden by default and removed from the screen when idle to avoid visual clutter.
+   - Appears dynamically only when active triggers occur:
+     - **Charger Plug / Unplug**: Displays battery percentage and charging state for 4 seconds, then auto-hides.
+     - **Music Playback**: Appears in collapsed state when media plays; auto-hides 6 seconds after pausing. Does not auto-expand.
+     - **Incoming Notifications**: Displays brief 4.5-second alert banner, then auto-hides.
+     - **Active Timer & Stopwatch**: Stays visible while a countdown timer or stopwatch runs.
+   - Each trigger can be independently toggled in Settings.
 
-3. **Media Controls & Now Playing (Phase 3)**
-   - Connects to active audio sessions via `MediaSessionManager` (Spotify, YouTube Music, Apple Music, etc.).
-   - Displays track title, artist name, and animated 3-bar audio equalizer waves.
-   - Play/Pause toggle, Previous track, and Next track transport controls.
-   - Gracefully hides the music view when playback stops.
+3. **Music in Collapsed Pill & Expanded Card**
+   - **Collapsed Pill**: Displays the actual source app icon (e.g. Spotify, YouTube Music) via `PackageManager.getApplicationIcon()`, accompanied by a progress bar updating every 1 second (or an animated 3-bar equalizer if track duration is unknown).
+   - **Expanded Card**: Displays album artwork, track title, artist name, elapsed / total duration progress bar, and full playback controls (Previous, Play/Pause, Next) via `MediaController.transportControls`.
 
-4. **Incoming Notifications (Phase 4)**
-   - Brief 4.5-second banner in the pill when incoming notifications arrive via `NotificationListenerService`.
+4. **Status Bar Clearance & Alignment Calibration**
+   - Sits cleanly below the status bar with automatic runtime status bar height detection and a 4dp gap, plus an in-app fine-tuning slider (0–40dp).
+   - Status bar icons (clock, signal, battery) remain fully visible and tappable in both collapsed and expanded states.
+   - First-time launch presentation: plays a ~1.5s expansion animation, then collapses into position below the status bar. (Third-party apps cannot hide the system status bar).
 
 5. **Nothing OS & CMF Phone 2 Pro Calibrated**
-   - In-app punch-hole calibration slider (0–40dp) to align the pill around the front camera cutout.
    - Foreground service with `specialUse` type and `START_STICKY` for survival against Nothing OS memory killers.
+   - Foreground service notification configured with `IMPORTANCE_MIN` and text `"Dynamic Island is active"` for minimal intrusion.
    - In-app guide and shortcut to set battery usage to **Unrestricted**.
    - Pure black OLED styling with Nothing red accents and clean monospace typography.
 
@@ -167,8 +171,8 @@ To ensure 24/7 continuous operation:
 
 | Limitation / Nothing OS Behavior | Impact | How It Is Handled In This App |
 | :--- | :--- | :--- |
-| **Punch-hole Camera Alignment** | The CMF Phone 2 Pro has a centered punch-hole camera. A fixed pixel position may misalign if display scaling or font size is changed. | **Dynamic Calibration Slider:** In Settings, a dedicated *Vertical Offset (Y-Axis)* slider allows you to calibrate the pill in 1dp increments from 0dp to 40dp to frame the punch hole pixel-perfectly regardless of display scaling. |
+| **Status Bar & Icon Clearance** | The CMF Phone 2 Pro has a centered camera cutout and status bar elements (clock, notifications, battery). Overlays can obscure these icons if placed too high. | **Automatic Runtime Status Bar Height Detection:** At runtime, the overlay queries the system status bar height via `WindowInsets` / `status_bar_height` and places the pill 4dp below the status bar so the clock, signal, and battery indicators remain completely unobstructed. An extra *Vertical Offset (Y-Axis)* slider (0dp–40dp) in Settings allows user fine-tuning. |
 | **Aggressive Process Termination ("Deep Sleep")** | Nothing OS (based on Android 14/15) kills background services to preserve battery life. | **Android 14/15 Compliant FGS:** Service is declared with `android:foregroundServiceType="specialUse"` and configured with `START_STICKY`. The app automatically restarts via `onStartCommand` and handles `BOOT_COMPLETED` through `BootReceiver`. |
-| **Touch Events Outside Expanded Card** | Commercial overlay apps often block touches across the screen when expanded or fail to dismiss when tapping outside. | **Dual-State Window Bounds:** In collapsed state, the WindowManager layout is `WRAP_CONTENT` (underlying apps receive all touches). When expanded to 340dp, the layout switches to `MATCH_PARENT` with a transparent touch-scrim that captures taps outside the card, plays the bouncy collapse spring, and resets the bounds. |
+| **Touch Events & Status Bar Access** | Commercial overlay apps often block touches across the screen when expanded or block status bar icons. | **Sized Window Bounds & Outside Touch Watching:** Both collapsed and expanded states use `WRAP_CONTENT` bounds positioned strictly below the status bar (`y = topOffsetPx`). WindowManager flags include `FLAG_WATCH_OUTSIDE_TOUCH`, `FLAG_NOT_FOCUSABLE`, and `FLAG_NOT_TOUCH_MODAL`. Taps outside the pill or card fall through directly to underlying apps and status bar icons, while outside touches smoothly collapse the expanded card without intercepting the user's touch. |
 | **Media Metadata Delay on Nothing OS** | When skipping tracks on Spotify or YouTube Music, metadata callbacks can arrive asynchronously. | **Reactive StateFlow & Fallback:** `MusicControllerHelper` registers both active session listeners and per-controller callbacks (`onPlaybackStateChanged`, `onMetadataChanged`). When playback ceases, it gracefully pauses and collapses the pill. |
 | **ComposeView Inside WindowManager Crash** | Attaching Jetpack Compose outside an Activity normally crashes with `ViewTreeLifecycleOwner not found`. | **OverlayLifecycleOwner:** Implements custom `SavedStateRegistryOwner`, `ViewModelStoreOwner`, and `LifecycleOwner` attached directly to the `ComposeView`, ensuring zero lifecycle crashes. |

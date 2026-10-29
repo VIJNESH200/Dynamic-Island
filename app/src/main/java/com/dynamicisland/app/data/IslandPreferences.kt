@@ -28,7 +28,13 @@ class IslandPreferences(context: Context) {
     private val _isNotificationFeatureEnabled = MutableStateFlow(prefs.getBoolean(KEY_NOTIFICATION_ENABLED, true))
     val isNotificationFeatureEnabled: StateFlow<Boolean> = _isNotificationFeatureEnabled.asStateFlow()
 
-    // Vertical offset in DP from top of screen to accommodate CMF Phone 2 Pro punch-hole camera
+    private val _isTimerFeatureEnabled = MutableStateFlow(prefs.getBoolean(KEY_TIMER_ENABLED, true))
+    val isTimerFeatureEnabled: StateFlow<Boolean> = _isTimerFeatureEnabled.asStateFlow()
+
+    private val _hasShownFirstTimeIntro = MutableStateFlow(prefs.getBoolean(KEY_FIRST_TIME_INTRO, false))
+    val hasShownFirstTimeIntro: StateFlow<Boolean> = _hasShownFirstTimeIntro.asStateFlow()
+
+    // Extra vertical offset in DP added on top of the calculated status bar height + 4dp gap
     private val _verticalOffsetDp = MutableStateFlow(prefs.getInt(KEY_VERTICAL_OFFSET, DEFAULT_OFFSET_DP))
     val verticalOffsetDp: StateFlow<Int> = _verticalOffsetDp.asStateFlow()
 
@@ -56,6 +62,16 @@ class IslandPreferences(context: Context) {
         _isNotificationFeatureEnabled.value = enabled
     }
 
+    fun setTimerFeatureEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_TIMER_ENABLED, enabled).apply()
+        _isTimerFeatureEnabled.value = enabled
+    }
+
+    fun setHasShownFirstTimeIntro(shown: Boolean) {
+        prefs.edit().putBoolean(KEY_FIRST_TIME_INTRO, shown).apply()
+        _hasShownFirstTimeIntro.value = shown
+    }
+
     fun setVerticalOffsetDp(offset: Int) {
         prefs.edit().putInt(KEY_VERTICAL_OFFSET, offset).apply()
         _verticalOffsetDp.value = offset
@@ -72,11 +88,13 @@ class IslandPreferences(context: Context) {
         private const val KEY_BATTERY_ENABLED = "battery_enabled"
         private const val KEY_MUSIC_ENABLED = "music_enabled"
         private const val KEY_NOTIFICATION_ENABLED = "notification_enabled"
+        private const val KEY_TIMER_ENABLED = "timer_enabled"
+        private const val KEY_FIRST_TIME_INTRO = "has_shown_first_time_intro"
         private const val KEY_VERTICAL_OFFSET = "vertical_offset_dp"
         private const val KEY_PILL_WIDTH = "pill_width_dp"
 
-        // Default: 12dp below top edge, sitting around the CMF Phone 2 Pro punch hole
-        const val DEFAULT_OFFSET_DP = 12
+        // Default extra offset: 0dp (pill sits cleanly 4dp below the system status bar)
+        const val DEFAULT_OFFSET_DP = 0
         const val DEFAULT_PILL_WIDTH_DP = 126
 
         @Volatile

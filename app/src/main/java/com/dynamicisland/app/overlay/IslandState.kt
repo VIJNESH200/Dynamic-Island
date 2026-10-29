@@ -15,7 +15,9 @@ enum class ActiveMode {
     IDLE,
     BATTERY,
     MUSIC,
-    NOTIFICATION
+    NOTIFICATION,
+    TIMER,
+    FIRST_TIME_INTRO
 }
 
 /**

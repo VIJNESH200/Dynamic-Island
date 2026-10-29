@@ -16,12 +16,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
@@ -42,7 +40,7 @@ import androidx.compose.ui.unit.sp
 import com.dynamicisland.app.data.IslandPreferences
 import com.dynamicisland.app.ui.components.NothingCard
 import com.dynamicisland.app.ui.components.NothingSwitch
-import com.dynamicisland.app.ui.theme.DarkSurface
+import com.dynamicisland.app.ui.theme.BatteryGreen
 import com.dynamicisland.app.ui.theme.NothingDarkGray
 import com.dynamicisland.app.ui.theme.NothingGrayText
 import com.dynamicisland.app.ui.theme.NothingRed
@@ -60,6 +58,7 @@ fun SettingsScreen(
     val isBatteryEnabled by preferences.isBatteryFeatureEnabled.collectAsState()
     val isMusicEnabled by preferences.isMusicFeatureEnabled.collectAsState()
     val isNotificationEnabled by preferences.isNotificationFeatureEnabled.collectAsState()
+    val isTimerEnabled by preferences.isTimerFeatureEnabled.collectAsState()
     val verticalOffset by preferences.verticalOffsetDp.collectAsState()
     val pillWidth by preferences.pillWidthDp.collectAsState()
 
@@ -99,17 +98,25 @@ fun SettingsScreen(
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Features Toggle Section
-            Text(
-                text = "ISLAND MODULES",
-                color = NothingGrayText,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                letterSpacing = 1.sp
-            )
+            // Trigger Settings Section
+            Column {
+                Text(
+                    text = "TRIGGER SETTINGS",
+                    color = NothingGrayText,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "The pill is hidden by default and appears only when active events trigger it.",
+                    color = NothingGrayText,
+                    fontSize = 12.sp
+                )
+            }
 
-            // Battery Feature Toggle
+            // Charger Plug / Unplug Trigger Toggle
             NothingCard {
                 Row(
                     modifier = Modifier
@@ -118,28 +125,34 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
                             imageVector = Icons.Default.BatteryChargingFull,
                             contentDescription = null,
-                            tint = if (isBatteryEnabled) Color(0xFF34C759) else NothingGrayText,
+                            tint = if (isBatteryEnabled) BatteryGreen else NothingGrayText,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "Battery & Charging",
+                                text = "Charger Plug / Unplug",
                                 color = NothingWhite,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Show charge rate, % & time to full",
+                                text = "Show battery status for 4s, then hide",
                                 color = NothingGrayText,
                                 fontSize = 12.sp
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     NothingSwitch(
                         checked = isBatteryEnabled,
@@ -148,7 +161,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Music Feature Toggle
+            // Music Playback Trigger Toggle
             NothingCard {
                 Row(
                     modifier = Modifier
@@ -157,7 +170,10 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
                             imageVector = Icons.Default.MusicNote,
                             contentDescription = null,
@@ -167,18 +183,21 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "Music & Media Controls",
+                                text = "Music Playback",
                                 color = NothingWhite,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Display song title, artist & play/pause",
+                                text = "Visible while playing; hides 6s after pause",
                                 color = NothingGrayText,
                                 fontSize = 12.sp
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     NothingSwitch(
                         checked = isMusicEnabled,
@@ -187,7 +206,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Notification Feature Toggle
+            // Notification Trigger Toggle
             NothingCard {
                 Row(
                     modifier = Modifier
@@ -196,7 +215,10 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Notifications,
                             contentDescription = null,
@@ -211,13 +233,16 @@ fun SettingsScreen(
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Briefly popup banners in the pill",
+                                text = "Briefly pop up banner, then auto-hide",
                                 color = NothingGrayText,
                                 fontSize = 12.sp
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     NothingSwitch(
                         checked = isNotificationEnabled,
@@ -226,9 +251,54 @@ fun SettingsScreen(
                 }
             }
 
-            // CMF Phone 2 Pro Hardware Cutout Calibration
+            // Timer Trigger Toggle
+            NothingCard {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.HourglassBottom,
+                            contentDescription = null,
+                            tint = if (isTimerEnabled) Color(0xFFFF9500) else NothingGrayText,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Active Timer & Countdown",
+                                color = NothingWhite,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Visible while clock timer or stopwatch runs",
+                                color = NothingGrayText,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    NothingSwitch(
+                        checked = isTimerEnabled,
+                        onCheckedChange = { preferences.setTimerFeatureEnabled(it) }
+                    )
+                }
+            }
+
+            // Vertical Alignment Calibration
             Text(
-                text = "PUNCH-HOLE ALIGNMENT",
+                text = "VERTICAL ALIGNMENT",
                 color = NothingGrayText,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
@@ -250,7 +320,7 @@ fun SettingsScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "${verticalOffset} dp",
+                            text = "+${verticalOffset} dp",
                             color = NothingRed,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
@@ -260,7 +330,7 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Adjust top spacing to frame your CMF Phone 2 Pro front camera.",
+                        text = "Extra spacing below status bar (fine-tune placement).",
                         color = NothingGrayText,
                         fontSize = 12.sp
                     )
@@ -336,7 +406,7 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Reset Alignment to CMF Defaults",
+                            text = "Reset Alignment to Defaults",
                             color = NothingWhite,
                             fontSize = 13.sp
                         )

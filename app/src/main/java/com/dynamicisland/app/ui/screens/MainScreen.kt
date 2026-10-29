@@ -457,6 +457,28 @@ fun MainScreen(
                             fontSize = 13.sp
                         )
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            DynamicIslandService.triggerChargerAlert()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = DarkSurface),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BatteryChargingFull,
+                            contentDescription = null,
+                            tint = BatteryGreen,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Trigger Charger Alert (4s)",
+                            color = NothingWhite,
+                            fontSize = 13.sp
+                        )
+                    }
                 }
             }
 

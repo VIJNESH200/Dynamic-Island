@@ -4,15 +4,15 @@ This guide details the technical considerations, display characteristics, and OS
 
 ---
 
-## 1. Display & Punch-Hole Camera Cutout
+## 1. Display & Status Bar Clearance
 
 - **Camera Cutout:** Centered circular punch-hole at the top edge.
-- **Status Bar & Scaling:** Status bar height and display metrics vary based on user display zoom and font scaling in system settings.
+- **Status Bar & Insets:** The status bar houses the clock, notification icons, and battery indicators. Status bar height varies dynamically based on user display zoom and font scaling in system settings.
 
 ### Alignment Strategy:
-In `IslandPreferences.kt`, the default vertical offset is set to `12dp` (from the top of the display surface), placing the top edge of the collapsed pill right above the camera punch-hole so that the pill neatly encloses and frames the camera hole, giving the authentic iPhone Dynamic Island feel. 
+Rather than overlapping the status bar or covering the clock, signal, and battery icons, the pill is positioned cleanly **below** the status bar. At runtime, the overlay queries the real system status bar height via `WindowInsets.Type.statusBars()` (Android 11+) or the system resource `status_bar_height`, and positions the pill with a 4dp gap below it. This ensures the clock, signal bars, battery icons, and camera cutout remain completely visible and unobstructed.
 
-Because exact resolutions and display scaling can differ across CMF / Nothing device variants and OS updates (check your device under **Settings > About phone**), you do not need to rely on hardcoded numbers: use the in-app **Settings > Vertical Offset (Y-Axis)** slider (`0dp` to `40dp`) to calibrate the pill pixel-perfectly on your screen in real time.
+To accommodate different personal preferences or custom themes, the in-app **Settings > Vertical Offset (Y-Axis)** slider (`0dp` to `40dp`) adds extra vertical spacing on top of the calculated status bar clearance.
 
 ---
 
@@ -26,11 +26,11 @@ Nothing OS features proprietary battery management algorithms ("Smart Battery" /
    ```kotlin
    NotificationChannel(
        CHANNEL_ID,
-       "Dynamic Island Overlay",
-       NotificationManager.IMPORTANCE_LOW
+       "Dynamic Island",
+       NotificationManager.IMPORTANCE_MIN
    )
    ```
-   Uses `IMPORTANCE_LOW` so there is no disruptive chime or vibration, but the system process priority is elevated to `FOREGROUND_SERVICE`.
+   Uses `IMPORTANCE_MIN` so there is zero intrusive sound, vibration, or status bar clutter, while maintaining foreground service execution priority.
 
 2. **Android 14/15 Foreground Service Type:**
    Starting in Android 14 (API 34), generic foreground services are restricted. In `AndroidManifest.xml`:
